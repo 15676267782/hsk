@@ -2841,7 +2841,7 @@ def handle_passage_filling6(q, level, category, i):
     # ------------------------------
     st.markdown("### 短文阅读：")
     adjusted_passage = adjust_text_by_hsk(passage_text, hsk_num)  # 假设存在词汇调整函数
-    st.markdown(adjusted_passage)
+    st.markdown(passage_text)
 
     st.markdown("### 请选择合适的词填入空格：")
     user_answers = []
