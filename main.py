@@ -2950,29 +2950,28 @@ def handle_passage_filling6(q, level, category, i):
 
 
 def handle_reading_multiple_choice(q, level, category, i):
-    """阅读文章选择题处理器"""
+    """阅读文章选择题处理器（完全避免渲染后修改session_state）"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("阅读文章选择题", {})
     hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
 
     st.write("调试：阅读选择题数据结构 =", q)
-    # 1. 统一获取文章内容（兼容字符串和列表格式的 passages）
+
+    # 1. 获取文章内容
     passage = ""
     if "passages" in q:
         if isinstance(q["passages"], list) and q["passages"]:
-            passage = q["passages"][0]  # 列表格式，取第一个元素
+            passage = q["passages"][0]
         elif isinstance(q["passages"], str):
-            passage = q["passages"]  # 字符串格式，直接使用
+            passage = q["passages"]
 
-    # 备选：从 content 字段获取
     if not passage and "content" in q:
         passage = q["content"]
 
-    # 2. 统一问题格式（兼容单问题和多问题格式）
+    # 2. 统一问题格式
     questions = []
     if "questions" in q and isinstance(q["questions"], list):
         questions = q["questions"]
     else:
-        # 单问题格式转换
         if "question" in q or "options" in q:
             questions.append({
                 "text": q.get("question", ""),
@@ -2988,16 +2987,34 @@ def handle_reading_multiple_choice(q, level, category, i):
 
     if not questions:
         st.error("错误：未找到有效问题")
-        st.json(q)  # 显示原始数据用于调试
+        st.json(q)
         return
 
-    # 显示处理后的数据结构（调试用）
+    # 显示处理后的数据结构
     st.write("处理后的数据结构:", {
         "passage": passage[:50] + "..." if len(passage) > 50 else passage,
         "question_count": len(questions)
     })
 
-    # 显示文章（应用词汇等级调整）
+    # 预初始化所有session_state键
+    for j in range(1, len(questions) + 1):
+        answer_key = f"reading_{i}_{j}"
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = None
+
+    # 提交答案回调函数
+    def submit_answers():
+        st.session_state.submitted = True
+
+    # 重置答案回调函数
+    def reset_answers():
+        for j in range(1, len(questions) + 1):
+            answer_key = f"reading_{i}_{j}"
+            st.session_state[answer_key] = None
+        if 'submitted' in st.session_state:
+            del st.session_state.submitted
+
+    # 显示文章
     st.markdown("### 阅读文章：")
     adjusted_passage = adjust_text_by_hsk(passage, hsk_num)
     st.markdown(adjusted_passage)
@@ -3008,36 +3025,83 @@ def handle_reading_multiple_choice(q, level, category, i):
         if not isinstance(question, dict):
             continue
 
-        # 获取问题数据
         q_text = question.get("text", f"问题{j}")
         options = question.get("options", [])
         answer = str(question.get("answer", "")).upper()
+        explanation = question.get("explanation", "")
 
         # 调整词汇等级
         adjusted_q = adjust_text_by_hsk(q_text, hsk_num)
         adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]
 
-        # 显示问题
-        st.markdown(f"**问题 {j}：** {adjusted_q}")
+        # 格式化选项标签
+        option_labels = []
+        for k, opt in enumerate(adjusted_options):
+            opt = re.sub(r'^[A-Da-d]\.?\s*', '', opt).strip()
+            option_labels.append(f"{chr(65 + k)}. {opt}")
 
-        # 显示选项
-        option_labels = [f"{chr(65 + k)}. {opt}" for k, opt in enumerate(adjusted_options)]
-        selected = st.radio(
-            f"选择问题{j}的答案：",
+        # 创建单选框
+        answer_key = f"reading_{i}_{j}"
+        default_index = 0
+
+        if st.session_state[answer_key] is not None:
+            saved_answer = st.session_state[answer_key]
+            default_index = next(
+                (idx for idx, opt in enumerate(option_labels) if opt == saved_answer),
+                0
+            )
+
+        # 只读取session_state，不修改
+        st.radio(
+            f"问题 {j}：{adjusted_q}",
             option_labels,
-            key=f"reading_q{i}_{j}"
+            index=default_index,
+            key=answer_key
         )
 
-        # 检查答案
-        if selected.startswith(f"{answer}."):
-            st.success("✓ 回答正确！")
-        else:
-            st.error(f"✗ 正确答案：{answer}")
+    # 按钮区域
+    col1, col2 = st.columns(2)
+    with col1:
+        st.button("提交答案", on_click=submit_answers)
+    with col2:
+        st.button("重置答案", on_click=reset_answers)
 
-        # 显示解析
-        explanation = question.get("explanation")
-        if explanation:
-            st.info(f"解析：{explanation}")
+    # 显示结果（仅在提交后）
+    if 'submitted' in st.session_state and st.session_state.submitted:
+        # 计算得分
+        correct_count = 0
+        total_questions = len(questions)
+
+        st.markdown(f"### ✅ **答题结果：**")
+
+        # 显示每个问题的结果
+        for j in range(1, total_questions + 1):
+            answer_key = f"reading_{i}_{j}"
+            if answer_key not in st.session_state or st.session_state[answer_key] is None:
+                st.warning(f"问题 {j}：未作答")
+                continue
+
+            user_choice = st.session_state[answer_key].split('.')[0].strip()
+            correct_answer = questions[j - 1].get("answer", "").upper()
+            explanation = questions[j - 1].get("explanation", "")
+            is_correct = user_choice == correct_answer
+
+            if is_correct:
+                correct_count += 1
+
+            status = "✅ 正确" if is_correct else "❌ 错误"
+
+            st.markdown(f"#### **问题 {j}：** {questions[j - 1].get('text', '')}")
+            st.markdown(f"**你的答案：** {user_choice} → {status}")
+            st.markdown(f"**正确答案：** {correct_answer}")
+
+            if not is_correct and explanation:
+                st.info(f"**解析：** {explanation}")
+            st.markdown("---")
+
+        # 更新得分
+        st.markdown(f"### ✅ **最终得分：**")
+        st.markdown(f"**答对：{correct_count}/{total_questions}题**")
 
 
 def handle_long_text_comprehension(q, level, category, i):
