@@ -11,7 +11,7 @@ import uuid
 import requests
 import jieba
 import random
-from pypinyin import pinyin,Style
+from pypinyin import pinyin, Style
 import time
 from contextlib import contextmanager
 
@@ -26,26 +26,26 @@ QUESTION_TYPES = {
         "阅读": ["阅读看图判断题", "图片匹配题", "问答匹配题", "选词填空题"]
     },
     "HSK2": {
-        "听力": ["听力看图判断题", "图片排序题","听对话选择题"],
+        "听力": ["听力看图判断题", "图片排序题", "听对话选择题"],
         "阅读": ["图片匹配题", "选词填空题", "阅读判断题", "句子匹配题"]
     },
     "HSK3": {
-        "听力": ["图片排序题", "文字判断题","听对话选择题"],
+        "听力": ["图片排序题", "文字判断题", "听对话选择题"],
         "阅读": ["选词填空题", "句子匹配题", "阅读理解题"],
         "写作": ["连词成句", "根据拼音写汉字"]
     },
     "HSK4": {
-        "听力": ["文字判断题","听对话选择题4","听对话选择题1v2"],
-        "阅读": ["选词填空题", "阅读理解题", "句子排序题","阅读理解题1v2"]
+        "听力": ["文字判断题", "听对话选择题4", "听对话选择题1v2"],
+        "阅读": ["选词填空题", "阅读理解题", "句子排序题", "阅读理解题1v2"]
     },
     "HSK5": {
-        "听力": ["听对话选择题5","听对话选择题1v3"],
+        "听力": ["听对话选择题5", "听对话选择题1v3"],
         "阅读": ["短文选词填空题5", "长文本理解题", "阅读文章选择题"],
         "对话": ["情景对话题"]  # 特别添加对话题型
     },
     "HSK6": {
-        "听力": ["听短文选择题","听对话选择题6","听对话选择题1v5"],
-        "阅读": ["短文选词填空题6", "病句选择题", "短文选句填空题","文章选择题"]
+        "听力": ["听短文选择题", "听对话选择题6", "听对话选择题1v5"],
+        "阅读": ["短文选词填空题6", "病句选择题", "短文选句填空题", "文章选择题"]
     }
 }
 
@@ -81,7 +81,7 @@ QUESTION_TYPE_DESCRIPTIONS = {
     "阅读文章选择题": "阅读长对话/文本后回答问题（阅读理解题型）",
     "病句选择题": "从N个句子中选出有语病的一项",
     "短文选句填空题": "阅读长文本后选择正确句子填入空缺处",
-    "文章选择题":"阅读文章，根据文章内容选择正确答案",
+    "文章选择题": "阅读文章，根据文章内容选择正确答案",
 
     # 写作题型
     "连词成句": "将给定的词语组合成通顺的句子",
@@ -90,7 +90,6 @@ QUESTION_TYPE_DESCRIPTIONS = {
     # 对话题型
     "情景对话题": "生成2-3轮自然对话，填空在关键交际用语位置"
 }
-
 
 # 详细题型配置
 DETAILED_QUESTION_CONFIG = {
@@ -161,7 +160,7 @@ DETAILED_QUESTION_CONFIG = {
                 "vocab_level": 1,
                 "vocab_weight_mode": True,  # 启用权重模式
             },
-             "问答匹配题": {
+            "问答匹配题": {
                 "require_audio": False,
                 "require_image": False,
                 "audio_content": "多个问题的文本",
@@ -169,24 +168,24 @@ DETAILED_QUESTION_CONFIG = {
                 "max_questions": 5,
                 "min_options": 5,
                 "max_options": 5,
-                 "min_words":20,
+                "min_words": 20,
                 "vocab_level": 1,
-                 "vocab_weight_mode": True,  # 启用权重模式
+                "vocab_weight_mode": True,  # 启用权重模式
                 "show_pinyin": True,  # 显示拼音
                 "options_format": "A. 选项内容(拼音)",  # 选项格式
                 "question_format": "{index}. {question_text}",  # 问题格式
                 "options": ["A", "B", "C", "D", "E", "F", "G"]  # 选项标识
             },
             "选词填空题":
-            {
-                "show_pinyin": True,    # 是否显示拼音
-                "options_per_question": 5,  # 固定5个选项
-                "max_questions": 5,     # 最多5道题
-                "max_options": 5,
-                "min_words":20,
-                "vocab_level": 1, # 对应HSK等级
-                "vocab_weight_mode": True,  # 启用权重模式
-            }
+                {
+                    "show_pinyin": True,  # 是否显示拼音
+                    "options_per_question": 5,  # 固定5个选项
+                    "max_questions": 5,  # 最多5道题
+                    "max_options": 5,
+                    "min_words": 20,
+                    "vocab_level": 1,  # 对应HSK等级
+                    "vocab_weight_mode": True,  # 启用权重模式
+                }
         },
     },
     "HSK2": {
@@ -235,12 +234,12 @@ DETAILED_QUESTION_CONFIG = {
                 "options_format": "{label}. {option_text}"
             },
             "选词填空题": {
-                "show_pinyin": False,    # 是否显示拼音
+                "show_pinyin": False,  # 是否显示拼音
                 "options_per_question": 5,  # 固定5个选项
-                "max_questions": 5,     # 最多5道题
+                "max_questions": 5,  # 最多5道题
                 "max_options": 5,
-                "min_words":50,
-                "vocab_level": 2, # 对应HSK等级
+                "min_words": 50,
+                "vocab_level": 2,  # 对应HSK等级
                 "vocab_weight_mode": True,  # 启用权重模式
             },
             "阅读判断题": {
@@ -262,7 +261,7 @@ DETAILED_QUESTION_CONFIG = {
                 "max_sentences": 8,
                 "min_options": 5,
                 "max_options": 5,
-                "min_words":40,
+                "min_words": 40,
                 "vocab_level": 2,
                 "vocab_weight_mode": True,  # 启用权重模式
                 "show_pinyin": True,  # 显示拼音
@@ -274,7 +273,7 @@ DETAILED_QUESTION_CONFIG = {
     },
     "HSK3": {
         "听力": {
-             "文字判断题": {
+            "文字判断题": {
                 "require_audio": True,
                 "require_image": False,
                 "audio_content": "一段包含描述的文本和需要判断的目标句子（用※标记）",
@@ -285,8 +284,8 @@ DETAILED_QUESTION_CONFIG = {
                 "question_format": "根据听到的内容，判断句子是否正确",
                 "target_sentence_marker": "※",  # 标记目标句子的符号
                 "options": ["对", "错"]  # 固定选项
-             },
-             "图片排序题": {
+            },
+            "图片排序题": {
                 "require_audio": True,
                 "require_image": True,
                 "audio_content": "描述图片顺序的对话",
@@ -298,56 +297,56 @@ DETAILED_QUESTION_CONFIG = {
                 "explanation_format": "答案解析：{explanation}",
                 "options_format": "{label}. {option_text}",
                 "display_style": "audio_first"
-             },
-             "听对话选择题": {
+            },
+            "听对话选择题": {
                 "require_audio": True,
                 "audio_content": "与选项相关的长对话",
                 "min_words": 80,
                 "max_options": 3,
                 "vocab_level": 3,
                 "vocab_weight_mode": True,  # 启用权重模式
-             },
+            },
         },
         "阅读": {
-                 "阅读理解题": {
-                    "require_audio": False,
-                    "require_image": False,
-                    "min_paragraphs": 2,
-                    "max_paragraphs": 4,
-                    "min_words": 80,
-                    "max_options": 3,
-                    "show_pinyin": False,  # 不显示拼音
-                    "vocab_level": 3,  # 使用数值引用权重配置
-                    "vocab_weight_mode": True,  # 启用权重模式
-                    "question_format": "根据短文内容，回答问题：",
-                    "explanation_format": "答案解析：{explanation}",
-                    "options_format": "{label}. {option_text}",
-                    "display_style": "paragraph_first"  # 先显示文章，再显示问题
-                 },
-                 "句子匹配题": {
-                    "require_audio": False,
-                    "require_image": False,
-                    "min_sentences": 6,
-                    "max_sentences": 8,
-                    "min_options": 5,
-                    "max_options":5,
-                    "min_words": 150,
-                    "vocab_level": 3,
-                    "vocab_weight_mode": True,  # 启用权重模式
-                    "show_pinyin": False,  # 显示拼音
-                    "options_format": "{label}. {option_text}",  # 选项格式
-                    "question_format": "为下列句子选择最合适的答句：",
-                    "explanation_format": "答案解析：{explanation}"
-                 },
-                 "选词填空题": {
-                    "show_pinyin": True,    # 是否显示拼音
-                    "options_per_question": 5,  # 固定5个选项
-                    "max_questions": 5,     # 最多5道题
-                    "max_options": 5,
-                    "min_words":100,
-                    "vocab_level": 3, # 对应HSK等级
-                    "vocab_weight_mode": True,  # 启用权重模式
-                },
+            "阅读理解题": {
+                "require_audio": False,
+                "require_image": False,
+                "min_paragraphs": 2,
+                "max_paragraphs": 4,
+                "min_words": 80,
+                "max_options": 3,
+                "show_pinyin": False,  # 不显示拼音
+                "vocab_level": 3,  # 使用数值引用权重配置
+                "vocab_weight_mode": True,  # 启用权重模式
+                "question_format": "根据短文内容，回答问题：",
+                "explanation_format": "答案解析：{explanation}",
+                "options_format": "{label}. {option_text}",
+                "display_style": "paragraph_first"  # 先显示文章，再显示问题
+            },
+            "句子匹配题": {
+                "require_audio": False,
+                "require_image": False,
+                "min_sentences": 6,
+                "max_sentences": 8,
+                "min_options": 5,
+                "max_options": 5,
+                "min_words": 150,
+                "vocab_level": 3,
+                "vocab_weight_mode": True,  # 启用权重模式
+                "show_pinyin": False,  # 显示拼音
+                "options_format": "{label}. {option_text}",  # 选项格式
+                "question_format": "为下列句子选择最合适的答句：",
+                "explanation_format": "答案解析：{explanation}"
+            },
+            "选词填空题": {
+                "show_pinyin": True,  # 是否显示拼音
+                "options_per_question": 5,  # 固定5个选项
+                "max_questions": 5,  # 最多5道题
+                "max_options": 5,
+                "min_words": 100,
+                "vocab_level": 3,  # 对应HSK等级
+                "vocab_weight_mode": True,  # 启用权重模式
+            },
         },
         "写作": {
             "连词成句": {
@@ -357,7 +356,7 @@ DETAILED_QUESTION_CONFIG = {
                 "max_words_count": 10,  # 词语最大数量
                 "min_sentence_length": 20,  # 连成句子的最少长度
                 "min_words": 150,
-                'max_options':6,
+                'max_options': 6,
                 "vocab_level": "3",
                 "show_pinyin": False,  #
                 "question_format": "请将下列词语连成一个完整的句子：",
@@ -397,7 +396,7 @@ DETAILED_QUESTION_CONFIG = {
                 "vocab_level": 4,
                 "vocab_weight_mode": True,  # 启用权重模式
                 "question_count": [2, 3],  # 题目数量范围
-                "question_audio_enabled":True,
+                "question_audio_enabled": True,
                 "show_dialogue_text": False,
                 "question_format": "题目{index}: {question_text}",
                 "options_format": "{label}. {option_text}",
@@ -415,13 +414,13 @@ DETAILED_QUESTION_CONFIG = {
                 "vocab_weight_mode": True,  # 启用权重模式
                 "question_content": "给出若干句子，每个句子中有一处空缺，从给定的选项中选择合适的词语填空",
                 "display_format": "sentence_first"
-                 },
+            },
             "阅读理解题1v2": {
                 "require_audio": False,
                 "require_image": False,
-                "min_questions":2,
-                "max_questions":2,
-                "max_passage_length":200,
+                "min_questions": 2,
+                "max_questions": 2,
+                "max_passage_length": 200,
                 "min_words": 180,
                 "max_options": 4,
                 "show_pinyin": False,  # 不显示拼音
@@ -431,7 +430,7 @@ DETAILED_QUESTION_CONFIG = {
                 "explanation_format": "答案解析：{explanation}",
                 "options_format": "{label}. {option_text}",
                 "display_style": "paragraph_first"  # 先显示文章，再显示问题
-                },
+            },
             "句子排序题": {
                 "require_audio": False,
                 "require_image": False,
@@ -446,13 +445,11 @@ DETAILED_QUESTION_CONFIG = {
                 "sort_hint": "注意逻辑关系（如总分、因果、时间顺序等）"
             }
 
-
-
         }
 
     },
     "HSK5": {
-        "听力":{
+        "听力": {
             "听对话选择题5": {
                 "require_audio": True,
                 "audio_content": "与选项相关的问题",
@@ -501,7 +498,7 @@ DETAILED_QUESTION_CONFIG = {
                 "question_types": ["词语理解", "细节理解", "推理判断", "标题归纳"],  # 问题类型
                 "explanation_format": "解析：{explanation}",
                 "options_per_question": 4,  # 每题选项数
-                },
+            },
             "长文本理解题": {
                 "question_format": "根据短文内容，选择正确答案：",
                 "options_format": "{label}. {option_text}",
@@ -537,7 +534,7 @@ DETAILED_QUESTION_CONFIG = {
                 "options_format": "{label}. {option_text}",
                 "display_style": "material_first"  # 先显示材料，再显示题目
             },
-            "听短文选择题":{
+            "听短文选择题": {
                 "require_audio": True,
                 "require_image": False,
                 "min_words": 500,
@@ -556,7 +553,7 @@ DETAILED_QUESTION_CONFIG = {
                 "require_audio": False,
                 "require_image": False,
                 "max_options": 4,
-                "min_words": 350,
+                "min_words": 550,
                 "vocab_level": 6,  # 词汇等级
                 "question_content": "从选项中选择合适的词填入短文空格",
                 "min_gaps": 3,  # 最少空位数
@@ -587,18 +584,19 @@ DETAILED_QUESTION_CONFIG = {
                 "question_format": "选出没有语病的一项：",
                 "options_format": "{label}. {sentence}",
                 "show_explanation": True,
-                "error_types": ["逻辑错误", "歧义", "赘余", "关联词语不当","语序不当", "搭配不当", "成分残缺", "句式杂糅"],
+                "error_types": ["逻辑错误", "歧义", "赘余", "关联词语不当", "语序不当", "搭配不当", "成分残缺", "句式杂糅"],
                 "max_sentences": 4
             },
-            "文章选择题":{
-                "min_questions": 4,    # 最少题目数
-                "max_questions": 4,   # 最多题目数
+            "文章选择题": {
+                "min_questions": 4,  # 最少题目数
+                "max_questions": 4,  # 最多题目数
                 "question_format": "根据文章内容，回答问题：",  # 问题段落标题
                 "min_words": 500,
                 "max_options": 4,
                 "vocab_level": 6,
                 "options_per_question": 4,  # 每题选项数（示例中为4，可根据需求调整）
-                "explanation_format": "第 {question_id} 题解析：正确答案为 {answer}。原文提到 {explanation_key}，因此选项 {answer} 符合文意。",  # 解析模板
+                "explanation_format": "第 {question_id} 题解析：正确答案为 {answer}。原文提到 {explanation_key}，因此选项 {answer} 符合文意。",
+                # 解析模板
                 "show_explanation": True,  # 是否显示解析
                 "answer_position": "end",  # 答案位置（"end"表示在选项后，可按需调整）
             }
@@ -634,12 +632,12 @@ HSK_WORDS = {
 
 # HSK词库权重配置
 HSK_WEIGHT_CONFIG = {
-    1: [0.8, 0.2, 0, 0, 0, 0],      # HSK1: 80% L1, 20% L2-3
-    2: [0.2, 0.65, 0.15, 0, 0, 0],   # HSK2: 20% L1以下, 65% L2, 15% L3-4
-    3: [0, 0.2, 0.6, 0.2, 0, 0],     # HSK3: 20% L2以下, 60% L3, 20% L4-5
-    4: [0, 0, 0.2, 0.6, 0.2, 0],     # HSK4: 20% L3以下, 60% L4, 20% L5-6
-    5: [0, 0, 0, 0.2, 0.7, 0.1],     # HSK5: 20% L4以下, 70% L5, 10% L6
-    6: [0, 0, 0, 0, 0.3, 0.7]        # HSK6: 30% L5以下, 70% L6
+    1: [0.8, 0.2, 0, 0, 0, 0],  # HSK1: 80% L1, 20% L2-3
+    2: [0.2, 0.65, 0.15, 0, 0, 0],  # HSK2: 20% L1以下, 65% L2, 15% L3-4
+    3: [0, 0.2, 0.6, 0.2, 0, 0],  # HSK3: 20% L2以下, 60% L3, 20% L4-5
+    4: [0, 0, 0.2, 0.6, 0.2, 0],  # HSK4: 20% L3以下, 60% L4, 20% L5-6
+    5: [0, 0, 0, 0.2, 0.7, 0.1],  # HSK5: 20% L4以下, 70% L5, 10% L6
+    6: [0, 0, 0, 0, 0.3, 0.7]  # HSK6: 30% L5以下, 70% L6
 }
 
 # 添加HSK语法逻辑
@@ -673,6 +671,8 @@ VOICE_MAPPING = {
         'en': 'en-US-DavisNeural'
     }
 }
+
+
 # 字数逻辑
 
 
@@ -685,6 +685,7 @@ def init_sample_images():
                 img_path = f"images/{level}_{category}_{type_name}.jpg"
                 if not os.path.exists(img_path):
                     Image.new('RGB', (300, 200), color=(70, 130, 180)).save(img_path)
+
 
 def get_completion(prompt, model="qwen-plus"):
     """调用大模型API"""
@@ -699,6 +700,7 @@ def get_completion(prompt, model="qwen-plus"):
         st.error(f"API调用失败: {str(e)}")
         return None
 
+
 def clean_json_response(raw_response):
     """清理API返回的JSON数据"""
     try:
@@ -712,10 +714,12 @@ def clean_json_response(raw_response):
                 pass
         return None
 
+
 def get_hsk_level(level_str):
     """从HSK级别字符串中提取数字"""
     match = re.search(r'\d+', level_str)
     return int(match.group()) if match else 1
+
 
 def select_word_level_by_hsk(hsk_level):
     """根据HSK等级随机选择词库级别"""
@@ -731,6 +735,7 @@ def select_word_level_by_hsk(hsk_level):
             return level
 
     return 6  # 默认返回最高等级
+
 
 def adjust_text_by_hsk(text, hsk_level):
     """根据HSK等级调整文本中的词汇"""
@@ -756,6 +761,7 @@ def adjust_text_by_hsk(text, hsk_level):
                 adjusted_words.append(word)
     return ''.join(adjusted_words)
 
+
 def get_words_by_level(level):
     """获取指定HSK级别的词汇集合"""
     level_key = f"HSK_{level}"
@@ -766,6 +772,7 @@ def is_chinese_text(text):
     """判断文本是否主要为中文"""
     chinese_chars = sum(1 for char in text if '\u4e00' <= char <= '\u9fff')
     return chinese_chars / len(text) > 0.2 if text else False
+
 
 # ========== 听力题文字转语音 ==========
 async def text_to_speech(text, save_path="output.mp3", level="HSK4", voice='female', role='male'):
@@ -808,6 +815,7 @@ def temporary_audio_files():
                 except Exception as e:
                     st.warning(f"无法删除临时文件 {file_path}: {str(e)}")
 
+
 def generate_image_from_text(description):
     """使用百度千帆API生成图像"""
     access_token = "bce-v3/ALTAK-rAPN53AiNtSX1IXUEjVOK/7e8fd6c1dd61d0afe80c292f98ab84e1fc904561"
@@ -849,7 +857,6 @@ def add_pinyin(text):
     return f"{text}({pinyin_text})"
 
 
-
 def generate_prompt(level, category, question_types, num_questions=5):
     """生成动态Prompt，根据详细配置细化每个题型的要求"""
     hsk_num = get_hsk_level(level)
@@ -883,7 +890,8 @@ def generate_prompt(level, category, question_types, num_questions=5):
     # 构建每个题型的详细要求
     type_specific_requirements = []
     for type_name in question_types:
-        if level in DETAILED_QUESTION_CONFIG and category in DETAILED_QUESTION_CONFIG[level] and type_name in DETAILED_QUESTION_CONFIG[level][category]:
+        if level in DETAILED_QUESTION_CONFIG and category in DETAILED_QUESTION_CONFIG[level] and type_name in \
+                DETAILED_QUESTION_CONFIG[level][category]:
             config = DETAILED_QUESTION_CONFIG[level][category][type_name]
             reqs = []
 
@@ -914,7 +922,6 @@ def generate_prompt(level, category, question_types, num_questions=5):
     # 整合所有要求
     specific_reqs_text = "\n".join(type_specific_requirements) if type_specific_requirements else ""
 
-
     # 生成示例（只保留与当前选中题型相关的示例）
     relevant_examples = []
     for example in get_examples():
@@ -936,7 +943,8 @@ def generate_prompt(level, category, question_types, num_questions=5):
 1. 共生成{num_questions}道题
 2. 保持题型多样性
 3. 难度符合HSK{level}大纲
-
+4. 每次启动程序生成的题目都要不一样
+5. 选项要有干扰项，干扰强度随着HSK等级逐级提升
 【输出格式】
 {{
   "questions": [
@@ -955,7 +963,7 @@ def generate_prompt(level, category, question_types, num_questions=5):
       "sentences": ["句子1", "句子2", ...]  // 新增字段，用于存储填空题的句子
     }}
   ]
-  
+
 }}
 【题型示例】
 {json.dumps(relevant_examples, ensure_ascii=False, indent=2)}
@@ -966,8 +974,21 @@ def get_examples():
     """返回所有题型的示例"""
     return [
         {
-            "type": "看图判断题",
-            "content": "这张图片显示一个小男孩正在踢足球。",
+            "type": "听录音选择题",
+            "content": "我女儿今年6岁，她喜欢吃中国菜",
+            "audio_content": "我女儿今年6岁，她喜欢吃中国菜",
+            "question_content": "他女儿几岁了?",
+            "options": [
+                "6岁",
+                "8岁",
+                "9岁",
+            ],
+            "answer": "A",
+            "explanation": "录音中提到他女儿今年6岁",
+        },
+        {
+            "type": "听力看图判断题",
+            "content": "足球",
             "question": "一个小男孩在踢足球，对还是错？",
             "options": [
                 "对",
@@ -975,7 +996,7 @@ def get_examples():
             ],
             "answer": "对",
             "audio_content": "踢足球",
-            "image_description": "一个穿着蓝色衣服的小男孩在绿色草地上踢足球"
+            "image_description": "踢足球"
         },
         {
             "type": "选词填空题",
@@ -993,7 +1014,7 @@ def get_examples():
                 "D.学生",
                 "E.谢谢"],
             "answers": ["D", "B", "A", "C", "E"]  # 对应每个句子的正确选项
-},
+        },
         {
             "type": "看图选择题",
             "content": "请根据听到的内容选择对应的图片。",
@@ -1026,7 +1047,7 @@ def get_examples():
                 {"text": "17块"},
 
             ],
-            "answers": ["D", "A", "B", "C","E"]  # 正确答案
+            "answers": ["D", "A", "B", "C", "E"]  # 正确答案
         },
         {
             "type": "阅读判断题",
@@ -1119,33 +1140,33 @@ def get_examples():
                 "D. 图片描述是一个男人举着一台笔记本电脑",
                 "E. 图片描述是一个快递员送货上门"
             ],
-            "answer": ["A","E","D","C","B"]
+            "answer": ["A", "E", "D", "C", "B"]
         },
         {
-             "type": "图片排序题",
-             "dialogues": [
+            "type": "图片排序题",
+            "dialogues": [
                 "钱小姐你的电话，好的谢谢。",
                 "你看，这个衣服怎么样? 很漂亮。",
                 "你买什么东西了？都是你爱吃的东西。",
                 "我们去哪吃饭?前面有个饭馆，我们去那儿。",
                 "这个字谁会读。老师，我会！"
-             ],
-             "options": [
+            ],
+            "options": [
                 "一个男生伸手指前面",
                 "一个女学生在回答问题",
                 "一个男生举着电话",
                 "一购物车的东西",
                 "一对情侣在服装店买衣服"
-             ],
-             "answer": ["C","E","D","A","B"],
-             "explanations": [
+            ],
+            "answer": ["C", "E", "D", "A", "B"],
+            "explanations": [
                 "对话中提到接电话，所以对应选项C",
                 "对话讨论衣服，所以对应选项E",
                 "对话提到购物，所以对应选项D",
                 "对话讨论去饭馆吃饭，所以对应选项A",
                 "对话是课堂场景，所以对应选项B"
-             ]
-                },
+            ]
+        },
         {
             "type": "连词成句",
             "words": ["事情", "被他", "了", "解决", "已经"],
@@ -1349,7 +1370,7 @@ def get_examples():
                         "B. 一扫而空",
                         "C. 统筹兼顾",
                         "D. 一举两得"
-                        ],
+                    ],
                     "answer": "B",
                     "explanation": "指希望快速消除积累的问题，‘一扫而空’表示彻底清除"
                 },
@@ -1360,7 +1381,7 @@ def get_examples():
                         "B. 一旦",
                         "C. 不妨",
                         "D. 一度"
-                                ],
+                    ],
                     "answer": "B",
                     "explanation": "‘一旦’表示假设的条件，符合‘有了起色就纵容自己’的逻辑"
                 },
@@ -1376,7 +1397,7 @@ def get_examples():
                 }
             ],
         },
-       {
+        {
             "type": "阅读文章选择题",
             "passages": "一个富翁丢了钱包，十分着急，他广贴告示说，如果有人能替他把钱包找回来，他就把钱包里的金币分一半儿给那个人。几天后，有一个人找到了钱包，将它还给富翁。吝啬的富翁见到找回的钱包非常高兴，却又舍不得拿出一半儿金币。他眼珠一转，故作惊慌地说：“钱包里少了一枚钻石戒指。”那个人坚称自己从未见过钻石戒指。两人争吵起来，决定让法官来裁决。法官早就听闻富翁为人吝啬，便问富翁：“你敢肯定钱包里除了100枚金币，还有一枚钻石戒指吗？”“是的，我可以发誓！我的戒指就在钱包里！”富翁说。“那好，”法官接着说，“这个钱包里只有100枚金币，没什么钻石戒指。由此可以断定，这个钱包并不是你丢的那个。你还是去找里边有钻石戒指的钱包吧。",
             "questions": [
@@ -1654,77 +1675,100 @@ def main():
 
 
 # 题型处理器 - 策略模式实现
+TEMP_DIR = "temp_audio"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+
 def handle_look_and_judge1(q, level, category, i):
     """处理看图判断题（支持男女声双语音播报）"""
     # 获取该题型的详细配置
+    global adjusted_audio_text
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
 
-    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4)) # 获取HSK数字等级
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))  # 获取HSK数字等级
 
-    # 处理听力部分
-    if type_config.get("require_audio", True):
-        audio_text = q.get("audio_content", q["content"])
+    st.write("调试：短文选词填空题数据结构 =", q)
 
-        # 根据HSK等级调整听力内容词汇
-        adjusted_audio_text = adjust_text_by_hsk(audio_text, hsk_num)
-
-        st.markdown("🎧 **点击播放录音题内容：**")
-
-        # 生成男女声的临时音频文件
-        female_audio = f"temp_female_{uuid.uuid4().hex}.mp3"
-        male_audio = f"temp_male_{uuid.uuid4().hex}.mp3"
-
+    female_audio = None
+    male_audio = None
 
     try:
-        # 异步生成女声音频
-        asyncio.run(text_to_speech(adjusted_audio_text, female_audio, level, voice='female'))
-        # 异步生成男声音频
-        asyncio.run(text_to_speech(adjusted_audio_text, male_audio, level, voice='male'))
+        # 处理听力部分
+        if type_config.get("require_audio", True):
+            audio_text = q.get("audio_content", q["content"])
 
-        # 播放女声音频
-        st.markdown("👩 **女声朗读：**")
-        play_audio_in_streamlit(female_audio)
+            # 根据HSK等级调整听力内容词汇
+            adjusted_audio_text = adjust_text_by_hsk(audio_text, hsk_num)
 
-        # 停顿1秒
-        time.sleep(1)
+            st.markdown("🎧 **点击播放录音题内容：**")
 
-        # 播放男声音频
-        st.markdown("👨 **男声朗读：**")
-        play_audio_in_streamlit(male_audio)
+            # 生成带路径的临时音频文件
+            female_audio = os.path.join(TEMP_DIR, f"temp_female_{uuid.uuid4().hex}.mp3")
+            male_audio = os.path.join(TEMP_DIR, f"temp_male_{uuid.uuid4().hex}.mp3")
 
-    except Exception as e:
-        st.error(f"音频生成失败：{str(e)}")
+            # 分别处理男女声音频生成，避免一个失败影响另一个
+            try:
+                # 异步生成女声音频
+                asyncio.run(text_to_speech(adjusted_audio_text, female_audio, level, voice='female'))
+            except Exception as e:
+                st.error(f"女声音频生成失败：{str(e)}")
+                female_audio = None
+
+            try:
+                # 异步生成男声音频
+                asyncio.run(text_to_speech(adjusted_audio_text, male_audio, level, voice='male'))
+            except Exception as e:
+                st.error(f"男声音频生成失败：{str(e)}")
+                male_audio = None
+
+            # 播放音频（仅当音频文件存在时）
+            if female_audio and os.path.exists(female_audio):
+                st.markdown("👩 **女声朗读：**")
+                play_audio_in_streamlit(female_audio)
+
+                # 添加小延迟，确保音频播放完成
+                time.sleep(1)
+
+            if male_audio and os.path.exists(male_audio):
+                st.markdown("👨 **男声朗读：**")
+                play_audio_in_streamlit(male_audio)
+
+        # 处理图片部分
+        if type_config.get("require_image", True):
+            image_desc = q.get("image_description", q["content"])
+            st.markdown("🖼️ **根据描述生成图像：**")
+            img_bytes = generate_image_from_text(image_desc)
+            if img_bytes:
+                st.image(img_bytes, width=200)
+
+        # 显示选项
+        if q.get("options"):
+            # 根据HSK等级调整选项词汇
+            adjusted_options = [adjust_text_by_hsk(option, hsk_num) for option in q["options"]]
+
+            if f'answer_{i}' not in st.session_state:
+                st.session_state[f'answer_{i}'] = None
+
+            # 修复了之前代码中的语法错误（将中文逗号改为英文逗号）
+            selected_option = st.radio(
+                "请选择正确的答案：",
+                adjusted_options,
+                index=adjusted_options.index(st.session_state[f'answer_{i}'])
+                if st.session_state[f'answer_{i}'] in adjusted_options else 0,
+                key=f"options_{i}"
+            )
+
+            st.session_state[f'answer_{i}'] = selected_option
+
     finally:
-        # 清理临时文件
+        # 安全地清理临时文件
         for file in [female_audio, male_audio]:
-            if os.path.exists(file):
+            if file and os.path.exists(file):
+                try:
                     os.remove(file)
-
-    # 处理图片部分
-    if type_config.get("require_image", True):
-        image_desc = q.get("image_description", q["content"])
-        st.markdown("🖼️ **根据描述生成图像：**")
-        img_bytes = generate_image_from_text(image_desc)
-        if img_bytes:
-            st.image(img_bytes, width=200)
-
-    # 显示选项
-    if q.get("options"):
-        # 根据HSK等级调整选项词汇
-        adjusted_options = [adjust_text_by_hsk(option, hsk_num) for option in q["options"]]
-
-        if f'answer_{i}' not in st.session_state:
-            st.session_state[f'answer_{i}'] = None
-
-        selected_option = st.radio(
-            "请选择正确的答案：",
-            adjusted_options,
-            index=adjusted_options.index(st.session_state[f'answer_{i}'])
-            if st.session_state[f'answer_{i}'] in adjusted_options else 0,
-            key=f"options_{i}"
-        )
-
-        st.session_state[f'answer_{i}'] = selected_option
+                    st.debug(f"已成功删除临时文件: {file}")
+                except Exception as e:
+                    st.warning("")
 
 
 def handle_look_and_judge2(q, level, category, i):
@@ -1742,10 +1786,10 @@ def handle_look_and_judge2(q, level, category, i):
         if img_bytes:
             st.image(img_bytes, width=200)
 
-    # 显示题目内容
-    # st.markdown(f"**题目描述：** {q.get('content', '')}")
+        # 显示题目内容
+        # st.markdown(f"**题目描述：** {q.get('content', '')}")
 
-    # 显示问题
+        # 显示问题
         if q.get("question"):
             st.markdown(f"**问题：** {q['question']}")
 
@@ -1924,7 +1968,6 @@ def handle_listening(q, level, category, i):
     question = q.get("audio_question", "")
     options = q.get("options", [])
 
-
     # 调整词汇
     adjusted_audio_content = adjust_text_by_hsk(audio_content, hsk_num)
     adjusted_question = adjust_text_by_hsk(question, hsk_num)
@@ -1990,13 +2033,12 @@ def handle_listening(q, level, category, i):
     st.session_state[f'answer_{i}'] = selected_option
 
 
-
 def handle_fill_in_the_blank(q, level, category, i):
     """处理选词填空题（支持拼音显示和多题一次性展示）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
     show_pinyin = type_config.get("show_pinyin")
-    max_questions = type_config.get("max_questions",5)
+    max_questions = type_config.get("max_questions", 5)
 
     st.write("调试：阅读选择题数据结构 =", q)
 
@@ -2122,7 +2164,6 @@ def handle_text_judgment1(q, level, category, i):
             os.remove(temp_audio)
 
     # 显示带标记的完整句子
-
 
     # 显示问题和需要判断的句子
     st.markdown("### 问题：")
@@ -2320,7 +2361,6 @@ def handle_sentence_matching2(q, level, category, i):
             option_text = option
         else:  # 字典格式
             option_text = option.get("text", "")
-
 
         adjusted_text = adjust_text_by_hsk(option_text, hsk_num)
         pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
@@ -2675,13 +2715,12 @@ def handle_sentence_sorting(q, level, category, i):
     correct_order = q.get("answer", [])  # 正确顺序（如 ["C", "B", "A"]）
     hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
 
-
     # 提取标签和内容
     labels = [sentence.split('.')[0] for sentence in sentences]
     contents = [sentence.split('.', 1)[1].strip() for sentence in sentences]
 
     st.subheader(f"句子排序题 #{i + 1}")
-    st.markdown(f"**题目：** {config['question_content']}",hsk_num)
+    st.markdown(f"**题目：** {config['question_content']}", hsk_num)
     st.markdown(f"**提示：** {config['sort_hint']}")
 
     # 显示原始句子
@@ -2841,7 +2880,7 @@ def handle_passage_filling6(q, level, category, i):
     # ------------------------------
     st.markdown("### 短文阅读：")
     adjusted_passage = adjust_text_by_hsk(passage_text, hsk_num)  # 假设存在词汇调整函数
-    st.markdown(passage_text)
+    st.markdown(adjusted_passage)
 
     st.markdown("### 请选择合适的词填入空格：")
     user_answers = []
@@ -3229,7 +3268,7 @@ def handle_sentence_filling(q, level, category, i):
             if is_correct:
                 correct_count += 1
 
-        st.info(f"共回答 {len(results)} 题，正确 {correct_count} 题，正确率 {correct_count/len(results):.0%}")
+        st.info(f"共回答 {len(results)} 题，正确 {correct_count} 题，正确率 {correct_count / len(results):.0%}")
 
         if show_explanation:
             st.markdown("### 答案解析：")
@@ -3506,7 +3545,7 @@ def handle_article_questions(q, level, category, i):
 
         # 显示结果汇总
         total = len(user_answers)
-        st.info(f"共回答 {total} 题，正确 {correct_count} 题，正确率 {correct_count/total:.0%}")
+        st.info(f"共回答 {total} 题，正确 {correct_count} 题，正确率 {correct_count / total:.0%}")
 
         # 显示详细解析
         if show_explanation:
@@ -3626,38 +3665,39 @@ def handle_article_listening(q, level, category, i):
             if not result["is_correct"] and result["explanation"]:
                 st.info(f"**解析：** {result['explanation']}")
 
- # 题型处理器映射
+
+# 题型处理器映射
 QUESTION_HANDLERS = {
-    "听力看图判断题":handle_look_and_judge1,
-    "阅读看图判断题":handle_look_and_judge2,
+    "听力看图判断题": handle_look_and_judge1,
+    "阅读看图判断题": handle_look_and_judge2,
     "看图选择题": handle_look_and_choice,
-    "图片排序题":handle_image_sorting,
-    "听录音选择题":handle_listening,
-    "选词填空题":handle_fill_in_the_blank,
-    "图片匹配题":handle_image_matching,
-    "文字判断题":handle_text_judgment1,
-    "问答匹配题":handle_sentence_matching1,
-    "阅读判断题":handle_text_judgment2,
-    "句子匹配题":handle_sentence_matching2,
-    "阅读理解题":handle_reading_comprehension,
-    "听对话选择题":handle_listening,
+    "图片排序题": handle_image_sorting,
+    "听录音选择题": handle_listening,
+    "选词填空题": handle_fill_in_the_blank,
+    "图片匹配题": handle_image_matching,
+    "文字判断题": handle_text_judgment1,
+    "问答匹配题": handle_sentence_matching1,
+    "阅读判断题": handle_text_judgment2,
+    "句子匹配题": handle_sentence_matching2,
+    "阅读理解题": handle_reading_comprehension,
+    "听对话选择题": handle_listening,
     "听对话选择题4": handle_listening,
     "听对话选择题5": handle_listening,
-    "听对话选择题6":handle_listening,
-    "连词成句":handle_connect_words_into_sentence,
-    "听对话选择题1v2":handle_audio_dialogue_questions,
-    "听对话选择题1v3":handle_audio_dialogue_questions,
+    "听对话选择题6": handle_listening,
+    "连词成句": handle_connect_words_into_sentence,
+    "听对话选择题1v2": handle_audio_dialogue_questions,
+    "听对话选择题1v3": handle_audio_dialogue_questions,
     "听对话选择题1v5": handle_audio_dialogue_questions,
-    "句子排序题":handle_sentence_sorting,
-    "阅读理解题1v2":handle_reading_1v2,
-    "短文选词填空题5":handle_passage_filling5,
+    "句子排序题": handle_sentence_sorting,
+    "阅读理解题1v2": handle_reading_1v2,
+    "短文选词填空题5": handle_passage_filling5,
     "短文选词填空题6": handle_passage_filling6,
-    "阅读文章选择题":handle_reading_multiple_choice,
-    "长文本理解题":handle_long_text_comprehension,
-    "短文选句填空题":handle_sentence_filling,
-    "病句选择题":handle_sentence_error_choice,
-    "文章选择题":handle_article_questions,
-    "听短文选择题":handle_article_listening,
+    "阅读文章选择题": handle_reading_multiple_choice,
+    "长文本理解题": handle_long_text_comprehension,
+    "短文选句填空题": handle_sentence_filling,
+    "病句选择题": handle_sentence_error_choice,
+    "文章选择题": handle_article_questions,
+    "听短文选择题": handle_article_listening,
 
     # 其他题型处理器...
 }
