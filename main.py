@@ -98,8 +98,8 @@ DETAILED_QUESTION_CONFIG = {
             "听力看图判断题": {
                 "require_audio": True,
                 "require_image": True,
-                "audio_content": "与图片内容一致的简单描述",
-                "min_words": 10,
+                "audio_content": "2-4个字词语",
+                "min_words": 2,
                 "max_options": 2,
                 "vocab_level": 1,  # 使用数值引用 HSK_WEIGHT_CONFIG 中的配置
                 "vocab_weight_mode": True  # 启用权重模式的标志
@@ -144,7 +144,7 @@ DETAILED_QUESTION_CONFIG = {
             "阅读看图判断题": {
                 "require_audio": False,  # 阅读题中的看图判断题不需要音频
                 "require_image": True,
-                "min_words": 15,
+                "min_words": 5,
                 "max_options": 2,
                 "vocab_level": 1,
                 "vocab_weight_mode": True,  # 启用权重模式
@@ -245,8 +245,7 @@ DETAILED_QUESTION_CONFIG = {
             "阅读判断题": {
                 "require_audio": False,
                 "require_image": False,
-                "min_words": 100,
-                "max_words": 200,
+                "min_words": 40,
                 "vocab_level": 2,
                 "vocab_weight_mode": True,  # 启用权重模式
                 "show_pinyin": True,  # 显示拼音
@@ -371,7 +370,7 @@ DETAILED_QUESTION_CONFIG = {
                 "require_audio": True,
                 "require_image": False,
                 "audio_content": "一段包含描述的文本和需要判断的目标句子（用※标记）",
-                "min_words": 40,
+                "min_words": 80,
                 "max_options": 2,
                 "vocab_level": 4,
                 "vocab_weight_mode": True,  # 启用权重模式
@@ -672,9 +671,7 @@ VOICE_MAPPING = {
     }
 }
 
-
 # 字数逻辑
-
 
 def init_sample_images():
     """初始化示例图片目录"""
@@ -685,7 +682,6 @@ def init_sample_images():
                 img_path = f"images/{level}_{category}_{type_name}.jpg"
                 if not os.path.exists(img_path):
                     Image.new('RGB', (300, 200), color=(70, 130, 180)).save(img_path)
-
 
 def get_completion(prompt, model="qwen-plus"):
     """调用大模型API"""
@@ -700,7 +696,6 @@ def get_completion(prompt, model="qwen-plus"):
         st.error(f"API调用失败: {str(e)}")
         return None
 
-
 def clean_json_response(raw_response):
     """清理API返回的JSON数据"""
     try:
@@ -714,12 +709,10 @@ def clean_json_response(raw_response):
                 pass
         return None
 
-
 def get_hsk_level(level_str):
     """从HSK级别字符串中提取数字"""
     match = re.search(r'\d+', level_str)
     return int(match.group()) if match else 1
-
 
 def select_word_level_by_hsk(hsk_level):
     """根据HSK等级随机选择词库级别"""
@@ -735,7 +728,6 @@ def select_word_level_by_hsk(hsk_level):
             return level
 
     return 6  # 默认返回最高等级
-
 
 def adjust_text_by_hsk(text, hsk_level):
     """根据HSK等级调整文本中的词汇"""
@@ -761,12 +753,10 @@ def adjust_text_by_hsk(text, hsk_level):
                 adjusted_words.append(word)
     return ''.join(adjusted_words)
 
-
 def get_words_by_level(level):
     """获取指定HSK级别的词汇集合"""
     level_key = f"HSK_{level}"
     return HSK_WORDS.get(level_key, set())
-
 
 def is_chinese_text(text):
     """判断文本是否主要为中文"""
@@ -815,7 +805,6 @@ def temporary_audio_files():
                 except Exception as e:
                     st.warning(f"无法删除临时文件 {file_path}: {str(e)}")
 
-
 def generate_image_from_text(description):
     """使用百度千帆API生成图像"""
     access_token = "bce-v3/ALTAK-rAPN53AiNtSX1IXUEjVOK/7e8fd6c1dd61d0afe80c292f98ab84e1fc904561"
@@ -849,7 +838,6 @@ def generate_image_from_text(description):
     except Exception as e:
         st.warning(f"图片生成出错：{e}")
         return None
-
 
 def add_pinyin(text):
     pinyin_list = pinyin(text, style=Style.TONE)
@@ -945,6 +933,9 @@ def generate_prompt(level, category, question_types, num_questions=5):
 3. 难度符合HSK{level}大纲
 4. 每次启动程序生成的题目都要不一样
 5. 选项要有干扰项，干扰强度随着HSK等级逐级提升
+6. 生成的图片尽量写实，最好是真人的
+7. 图片排序图是五段毫不相关的dialogues
+
 【输出格式】
 {{
   "questions": [
@@ -953,7 +944,9 @@ def generate_prompt(level, category, question_types, num_questions=5):
       "content": "题目内容",
       "passages": ["所需的文章或段落"],
       "questions": ["问题1", "问题2", ...],  // 新增字段
+      "target_sentence":"目标句子",
       "gaps":["第一空","第二空, ..."]
+      "dialogues":["第一句","第二句",...]
       "options": ["A", "B", ...],  // 选择题需要
       "answer": "正确答案",
       "explanation": "答案解析",  // 可选
@@ -1027,9 +1020,10 @@ def get_examples():
         },
         {
             "type": "文字判断题",
-            "audio_content": "昨天晚上雨下得很大，城市的街道像是被洗过一样，变得非常干净。昨天晚上下了大雪",
+            "audio_content": "昨天晚上雨下得很大，城市的街道像是被洗过一样，变得非常干净。",
             "target_sentence": "昨天晚上下了大雪",
-            "answer": "错"},
+            "answer": "错"
+        },
         {
             "type": "问答匹配题",
             "questions": [
@@ -1122,7 +1116,7 @@ def get_examples():
             "audio_content": "上午女儿来电话了。她说什么了？她说她七月八号回家，你生日的前一天。太好了，我很想她。女儿哪天回家?",
             "audio_question": "女儿哪天回家？",
             "options": ["2月3日", "7月8日", "12月6日"],
-            "answer": "B"
+            "answer": ""
         },
         {
             "type": "图片匹配题",
@@ -1678,7 +1672,6 @@ def main():
 TEMP_DIR = "temp_audio"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-
 def handle_look_and_judge1(q, level, category, i):
     """处理看图判断题（支持男女声双语音播报）"""
     # 获取该题型的详细配置
@@ -1766,7 +1759,6 @@ def handle_look_and_judge1(q, level, category, i):
             if file and os.path.exists(file):
                 try:
                     os.remove(file)
-                    st.debug(f"已成功删除临时文件: {file}")
                 except Exception as e:
                     st.warning("")
 
@@ -1776,6 +1768,7 @@ def handle_look_and_judge2(q, level, category, i):
     # 获取该题型的详细配置
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
 
+    st.write(q)
     # 处理听力部分
 
     # 处理图片部分
@@ -1787,11 +1780,11 @@ def handle_look_and_judge2(q, level, category, i):
             st.image(img_bytes, width=200)
 
         # 显示题目内容
-        # st.markdown(f"**题目描述：** {q.get('content', '')}")
+        st.markdown(f"**题目描述：** {q.get('content', '')}")
 
         # 显示问题
-        if q.get("question"):
-            st.markdown(f"**问题：** {q['question']}")
+        if q.get("questions"):
+            st.markdown(f"**问题：** {q['questions']}")
 
     # 显示选项
     if q.get("options"):
@@ -1808,9 +1801,11 @@ def handle_look_and_judge2(q, level, category, i):
 
 
 def handle_look_and_choice(q, level, category, i):
-    """处理看图选择题"""
+    """处理看图选择题（修复图片生成问题）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write("调试：看图选择题数据结构 =", q)
 
     # 处理听力部分
     if type_config.get("require_audio", True):
@@ -1830,40 +1825,64 @@ def handle_look_and_choice(q, level, category, i):
     if type_config.get("require_image", True):
         st.markdown("🖼️ **请选择对应的图片：**")
 
-        # 处理选项图片
-        option_images = q.get("option_images", [])
-        if option_images:
-            cols = st.columns(len(option_images))
-            for j, img_desc in enumerate(option_images):
+        # 从options生成图片描述
+        image_descriptions = []
+        for j, option in enumerate(q.get("options", [])):
+            # 提取选项文本（去除选项前缀）
+            option_text = re.sub(r'^[A-Da-d]\.?\s*', '', option).strip()
+            image_descriptions.append(option_text)
+
+        # 生成并显示图片
+        if image_descriptions:
+            cols = st.columns(len(image_descriptions))
+            for j, img_desc in enumerate(image_descriptions):
                 img_bytes = generate_image_from_text(img_desc)
                 if img_bytes:
                     cols[j].image(img_bytes, width=150)
-                    cols[j].radio(f"选项{chr(65 + j)}",
-                                  [f"选项{chr(65 + j)}"],
-                                  key=f"img_option_{i}_{j}")
+                    cols[j].caption(f"选项{chr(65 + j)}: {img_desc}")
 
     # 显示问题
     if q.get("question"):
         adjusted_question = adjust_text_by_hsk(q["question"], hsk_num)
         st.markdown(f"**问题：** {adjusted_question}")
 
-    # 显示文本选项（如果有）
+    # 显示文本选项
     if q.get("options"):
         adjusted_options = [f"{chr(65 + j)}. {adjust_text_by_hsk(option, hsk_num)}"
-                            for j, option in enumerate(q["options"])]
+                            for j, option in enumerate(q.get("options", []))]
 
-        if f'answer_{i}' not in st.session_state:
-            st.session_state[f'answer_{i}'] = None
+        # 预初始化session_state
+        answer_key = f'answer_{i}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = None
 
+        # 创建单选框
         selected_option = st.radio(
             "请选择正确的答案：",
             adjusted_options,
-            index=adjusted_options.index(f"{q.get('answer', 'A')}. {q.get('options', [''])[0]}")
-            if f"{q.get('answer', 'A')}. {q.get('options', [''])[0]}" in adjusted_options else 0,
-            key=f"options_{i}"
+            index=next(
+                (idx for idx, opt in enumerate(adjusted_options)
+                 if opt.startswith(f"{q.get('answer', 'A')}.")),
+                0
+            ),
+            key=answer_key
         )
 
-        st.session_state[f'answer_{i}'] = selected_option.split('.')[0].strip()
+        # 存储答案（只在提交后处理，避免状态修改错误）
+        if st.button("提交答案"):
+            st.session_state[answer_key] = selected_option.split('.')[0].strip()
+
+            # 显示结果
+            correct_answer = q.get('answer', 'A')
+            user_choice = st.session_state[answer_key]
+
+            if user_choice == correct_answer:
+                st.success("✓ 回答正确！")
+            else:
+                st.error(f"✗ 正确答案：{correct_answer}")
+
+            if q.get("explanation"):
+                st.info(f"解析：{q.get('explanation')}")
 
 
 def handle_image_sorting(q, level, category, i):
@@ -2032,7 +2051,6 @@ def handle_listening(q, level, category, i):
 
     st.session_state[f'answer_{i}'] = selected_option
 
-
 def handle_fill_in_the_blank(q, level, category, i):
     """处理选词填空题（支持拼音显示和多题一次性展示）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
@@ -2135,11 +2153,12 @@ def handle_fill_in_the_blank(q, level, category, i):
         score = f"{correct_count}/{len(sentences)}"
         st.success(f"得分：{score} ({correct_count / len(sentences):.0%})")
 
-
 def handle_text_judgment1(q, level, category, i):
     """处理文字判断题"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write(q)
 
     # 提取题目信息
     audio_content = q.get("audio_content", "")
@@ -2182,7 +2201,6 @@ def handle_text_judgment1(q, level, category, i):
     )
 
     st.session_state[f'answer_{i}'] = selected_option
-
 
 def handle_sentence_matching1(q, level, category, i):
     """处理句子匹配题（包括问答匹配题）"""
@@ -2276,11 +2294,12 @@ def handle_sentence_matching1(q, level, category, i):
 
         st.session_state[answer_key] = selected_option.split('.')[0].strip()
 
-
 def handle_text_judgment2(q, level, category, i):
     """处理阅读判断题"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write(q)
 
     # 提取题目信息
     content = q.get("content", "")  # 阅读文本
@@ -2323,7 +2342,6 @@ def handle_text_judgment2(q, level, category, i):
     )
 
     st.session_state[answer_key] = selected_option
-
 
 def handle_sentence_matching2(q, level, category, i):
     """处理句子匹配题"""
@@ -2400,7 +2418,6 @@ def handle_sentence_matching2(q, level, category, i):
         )
 
         st.session_state[answer_key] = selected_option.split('.')[0].strip()
-
 
 def handle_reading_comprehension(q, level, category, i):
     """处理阅读理解题"""
@@ -2511,7 +2528,6 @@ def handle_reading_comprehension(q, level, category, i):
         # 保存用户选择
         st.session_state[answer_key] = selected_option.split('.')[0].strip()
 
-
 def handle_image_matching(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = get_hsk_level(level)
@@ -2558,7 +2574,6 @@ def handle_image_matching(q, level, category, i):
             explanation = q.get("explanations", [""])[j]
             st.info(type_config.get('explanation_format', '').format(explanation=explanation))
 
-
 def handle_connect_words_into_sentence(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = get_hsk_level(level)
@@ -2587,7 +2602,6 @@ def handle_connect_words_into_sentence(q, level, category, i):
 
     # 获取当前值而不是直接赋值
     user_answer = st.text_input("请输入连成的句子", value=st.session_state[answer_key], key=answer_key)
-
 
 def handle_audio_dialogue_questions(q, level, category, i):
     """处理听对话录音题（字典嵌套结构）"""
@@ -2707,7 +2721,6 @@ def handle_audio_dialogue_questions(q, level, category, i):
         if os.path.exists(dialogue_audio_file):
             os.remove(dialogue_audio_file)
 
-
 def handle_sentence_sorting(q, level, category, i):
     """句子排序题处理器"""
     config = DETAILED_QUESTION_CONFIG[level][category]["句子排序题"]
@@ -2753,7 +2766,6 @@ def handle_sentence_sorting(q, level, category, i):
             correct_order=" → ".join(correct_order),
             explanation=explanation
         ))
-
 
 def handle_passage_filling5(q, level, category, i):
     """短文选词填空题处理器"""
@@ -2829,7 +2841,6 @@ def handle_passage_filling5(q, level, category, i):
                 answer=gap.get("answer", "A"),
                 explanation=gap.get("explanation", "根据上下文逻辑选择")
             ))
-
 
 def handle_passage_filling6(q, level, category, i):
     """短文选词填空题处理器"""
@@ -2947,7 +2958,6 @@ def handle_passage_filling6(q, level, category, i):
                 st.markdown(f"**正确答案**：{res['correct_answer']}")
                 st.markdown(f"**解析**：{res['explanation']}")
                 st.markdown("---")
-
 
 def handle_reading_multiple_choice(q, level, category, i):
     """阅读文章选择题处理器（完全避免渲染后修改session_state）"""
@@ -3102,7 +3112,6 @@ def handle_reading_multiple_choice(q, level, category, i):
         # 更新得分
         st.markdown(f"### ✅ **最终得分：**")
         st.markdown(f"**答对：{correct_count}/{total_questions}题**")
-
 
 def handle_long_text_comprehension(q, level, category, i):
     """处理长文本理解题（修复嵌套列表格式的选项）"""
@@ -3265,7 +3274,6 @@ def handle_long_text_comprehension(q, level, category, i):
                 st.markdown(f"**解析：** {explanation}")
                 st.markdown("---")
 
-
 def handle_sentence_filling(q, level, category, i):
     """短文选句填空题处理器"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
@@ -3342,7 +3350,6 @@ def handle_sentence_filling(q, level, category, i):
                 st.markdown(f"**解析**：{res['explanation']}")
                 st.markdown("---")
 
-
 def handle_sentence_error_choice(q, level, category, i):
     """处理病句选择题"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("病句选择题", {})
@@ -3395,7 +3402,6 @@ def handle_sentence_error_choice(q, level, category, i):
             st.markdown(f"**语病类型**：{error_type}")
             st.markdown(f"**错误选项**：{user_answer} —— {selected_option.split('.', 1)[1].strip()}")
             st.markdown(f"**正确解析**：{explanation}")
-
 
 def handle_reading_1v2(q, level, category, i):
     """处理1篇文章+多道题的阅读理解题（增强版）"""
@@ -3526,7 +3532,6 @@ def handle_reading_1v2(q, level, category, i):
         score = f"{correct_count}/{len(questions_data)}"
         st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
 
-
 def handle_article_questions(q, level, category, i):
     """文章选择题处理器"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
@@ -3624,7 +3629,6 @@ def handle_article_questions(q, level, category, i):
                 st.markdown(f"**问题 {res['question_id']}**：{'✅ 正确' if res['is_correct'] else '❌ 错误'}")
                 st.markdown(f"**解析**：{explanation}")
                 st.markdown("---")
-
 
 def handle_article_listening(q, level, category, i):
     """处理听短文选择题"""
@@ -3728,7 +3732,6 @@ def handle_article_listening(q, level, category, i):
 
             if not result["is_correct"] and result["explanation"]:
                 st.info(f"**解析：** {result['explanation']}")
-
 
 # 题型处理器映射
 QUESTION_HANDLERS = {
