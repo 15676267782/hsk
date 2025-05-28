@@ -1,3 +1,4 @@
+import atexit
 import json
 import os
 import re
@@ -14,6 +15,7 @@ import random
 from pypinyin import pinyin, Style
 import time
 from contextlib import contextmanager
+from pathlib import Path
 
 # 加载环境变量
 _ = load_dotenv(find_dotenv())
@@ -381,7 +383,7 @@ DETAILED_QUESTION_CONFIG = {
             "听对话选择题4": {
                 "require_audio": True,
                 "audio_content": "与选项相关的问题",
-                "min_words": 80,
+                "min_words": 120,
                 "max_options": 4,
                 "vocab_level": 4,
                 "vocab_weight_mode": True,  # 启用权重模式
@@ -390,7 +392,7 @@ DETAILED_QUESTION_CONFIG = {
                 "require_audio": True,
                 "require_image": False,
                 "audio_content": "一段对话材料，随后有2 - 3道选择题",
-                "min_words": 100,
+                "min_words": 150,
                 "max_options": 4,
                 "vocab_level": 4,
                 "vocab_weight_mode": True,  # 启用权重模式
@@ -935,6 +937,7 @@ def generate_prompt(level, category, question_types, num_questions=5):
 5. 选项要有干扰项，干扰强度随着HSK等级逐级提升
 6. 生成的图片尽量写实，最好是真人的
 7. 图片排序图是五段毫不相关的dialogues
+8. 所有的题目都只能是单选题
 
 【输出格式】
 {{
@@ -950,7 +953,7 @@ def generate_prompt(level, category, question_types, num_questions=5):
       "options": ["A", "B", ...],  // 选择题需要
       "answer": "正确答案",
       "explanation": "答案解析",  // 可选
-      "audio_content": "语音内容（如果有）",
+      "audio_content": ["语音内容（如果有）","第二句",...],
       "audio_question": "语音问题（如果有）",
       "image_description": "图片描述（如果有）",
       "sentences": ["句子1", "句子2", ...]  // 新增字段，用于存储填空题的句子
@@ -962,6 +965,37 @@ def generate_prompt(level, category, question_types, num_questions=5):
 {json.dumps(relevant_examples, ensure_ascii=False, indent=2)}
 """
 
+
+# 自动清理临时文件的上下文管理器
+@contextmanager
+def manage_temp_files():
+    temp_files = []
+    try:
+        yield temp_files
+    finally:
+        for file_path in temp_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                st.warning(f"无法清理文件: {file_path} ({str(e)})")
+
+def cleanup_temp_files():
+    """清理所有临时文件"""
+    if 'temp_files' in st.session_state:
+        for file_path in st.session_state.temp_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                st.warning(f"无法清理文件: {file_path} ({str(e)})")
+
+        # 重置列表
+        st.session_state.temp_files = []
+
+
+# 注册应用退出时自动清理
+atexit.register(cleanup_temp_files)
 
 def get_examples():
     """返回所有题型的示例"""
@@ -1582,13 +1616,17 @@ def get_examples():
 
 
 def show_question_type_example(level, category, type_name):
-    """展示题型示例"""
-    img_path = f"images/{level}_{category}_{type_name}.jpg"
-    try:
-        with st.expander(f"{TYPE_ICONS.get(type_name, '')} {type_name} ", expanded=False):
-            st.image(img_path, use_container_width=True)
-    except:
-        st.warning("示例图片加载失败")
+    img_dir = Path("images")
+    img_path = img_dir / f"{level}_{category}_{type_name}.jpg"
+
+    with st.expander(f"{TYPE_ICONS.get(type_name, '')} {type_name}", expanded=False):
+        try:
+            if img_path.exists():
+                st.image(str(img_path))  # 关键：将Path对象转为字符串
+            else:
+                st.warning(f"图片不存在: {img_path}")
+        except Exception as e:
+            st.error(f"加载示例失败: {str(e)}")
 
 
 def main():
@@ -1975,67 +2013,118 @@ def handle_image_sorting(q, level, category, i):
         st.info(type_config.get('explanation_format', '').format(explanation=explanation))
 
 
+# 添加音频合并函数
+def combine_audio_files(audio_files, output_file):
+    """合并多个音频文件为一个"""
+    from pydub import AudioSegment
+
+    combined = AudioSegment.empty()
+    for file in audio_files:
+        audio = AudioSegment.from_mp3(file)
+        combined += audio
+
+    combined.export(output_file, format="mp3")
+
+
 def handle_listening(q, level, category, i):
-    """处理听力选择题（支持男女声双语音播报）"""
+    """处理听力选择题（动态读取audio_content并自动分配男女声，删除冒号前的内容）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
-    st.write("调试：阅读选择题数据结构 =", q)
+    st.write("调试：听力选择题数据结构 =", q)
 
     # 提取题目信息
-    audio_content = q.get("audio_content", "")
+    audio_content = q.get("audio_content", [])  # 确保是列表
     question = q.get("audio_question", "")
     options = q.get("options", [])
 
-    # 调整词汇
-    adjusted_audio_content = adjust_text_by_hsk(audio_content, hsk_num)
+    # 验证数据有效性
+    if not audio_content:
+        st.error("错误：未找到听力对话内容")
+        return
+
+    # 删除冒号及其前面的内容
+    adjusted_contents = []
+    original_contents = []  # 保留原始内容用于显示
+
+    for text in audio_content:
+        original_contents.append(text)
+
+        # 删除冒号及其前面的所有内容
+        cleaned_text = text.split('：')[-1].split(':')[-1].strip()
+        adjusted_text = adjust_text_by_hsk(cleaned_text, hsk_num)
+        adjusted_contents.append(adjusted_text)
+
     adjusted_question = adjust_text_by_hsk(question, hsk_num)
     adjusted_options = [adjust_text_by_hsk(option, hsk_num) for option in options]
 
-    # 生成男女声的临时音频文件
-    female_audio = f"temp_female_{uuid.uuid4().hex}.mp3"
-    question_audio1 = f"temp_female_{uuid.uuid4().hex}.mp3"
-    male_audio = f"temp_male_{uuid.uuid4().hex}.mp3"
-    question_audio2 = f"temp_male_{uuid.uuid4().hex}.mp3"
-    # 播放录音
-    st.markdown("🎧 **听力内容：**")
+    # 动态生成所有音频文件
+    audio_files = []
+    voice_types = ['female', 'male']  # 轮流使用女声和男声
 
     try:
-        # 异步生成女声音频
-        asyncio.run(text_to_speech(adjusted_audio_content, female_audio, level, voice='female'))
-        # 异步生成男声音频
-        asyncio.run(text_to_speech(adjusted_audio_content, male_audio, level, voice='male'))
+        # 为每个对话内容生成音频
+        for idx, (content, original) in enumerate(zip(adjusted_contents, original_contents)):
+            # 根据索引确定使用男声还是女声（交替使用）
+            voice = voice_types[idx % len(voice_types)]
+            icon = "👩" if voice == 'female' else "👨"
 
-        asyncio.run(text_to_speech(adjusted_question, question_audio1, level, voice='female'))
+            # 生成临时音频文件
+            audio_file = f"temp_{voice}_{uuid.uuid4().hex}.mp3"
+            asyncio.run(text_to_speech(content, audio_file, level, voice=voice))
 
-        asyncio.run(text_to_speech(adjusted_question, question_audio2, level, voice='male'))
+            # 记录音频文件和相关信息
+            audio_files.append({
+                'file': audio_file,
+                'voice': voice,
+                'icon': icon,
+                'content': content,
+                'original': original  # 保留原始带前缀的内容用于显示
+            })
 
-        # 直接显示音频播放器
-        st.markdown("👩 **女声朗读：**")
-        play_audio_in_streamlit(female_audio)
+            # st.write(f"{icon} 正在生成：{original[:30]}...")
+
+        # 生成问题音频（使用女声）
+        question_audio = f"temp_question_{uuid.uuid4().hex}.mp3"
+        asyncio.run(text_to_speech(adjusted_question, question_audio, level, voice='female'))
+
+        # 合并所有对话音频
+        combined_audio = f"temp_combined_{uuid.uuid4().hex}.mp3"
+        combine_audio_files([item['file'] for item in audio_files], combined_audio)
+
+        # 显示音频播放器
+        st.markdown("🎧 **听力内容（完整对话）：**")
+        play_audio_in_streamlit(combined_audio)
+
+        # 显示分段音频（带原始前缀信息）
+        with st.expander("查看分段音频"):
+            for item in audio_files:
+                st.markdown(f"{item['icon']} **{item['original']}**")
+                play_audio_in_streamlit(item['file'])
 
         st.markdown("**问题：**")
-        play_audio_in_streamlit(question_audio1)
+        play_audio_in_streamlit(question_audio)
 
-        st.markdown("👨 **男声朗读：**")
-        play_audio_in_streamlit(male_audio)
-
-        st.markdown("**问题：**")
-        play_audio_in_streamlit(question_audio2)
-
-
+        # 记录所有临时文件以便清理
+        if 'temp_files' not in st.session_state:
+            st.session_state.temp_files = []
+        st.session_state.temp_files.extend([combined_audio, question_audio] +
+                                           [item['file'] for item in audio_files])
 
     except Exception as e:
         st.error(f"生成或播放录音时出错: {str(e)}")
     finally:
-        # 使用st.session_state跟踪文件，确保在会话结束时清理
+        # 确保所有临时文件都被记录以便清理
         if 'temp_files' not in st.session_state:
             st.session_state.temp_files = []
-        st.session_state.temp_files.extend([female_audio, male_audio])
+        st.session_state.temp_files.extend([item['file'] for item in audio_files])
+
+        # 添加清理按钮
+    if st.button("清理临时文件", key=f"clean_{i}"):
+        cleanup_temp_files()
+        st.success("临时文件已清理！")
 
     # 显示问题和选项
-    # st.markdown(f"**问题：** {adjusted_question}")
-
     if f'answer_{i}' not in st.session_state:
         st.session_state[f'answer_{i}'] = None
 
@@ -2050,6 +2139,20 @@ def handle_listening(q, level, category, i):
     )
 
     st.session_state[f'answer_{i}'] = selected_option
+
+    # 提交答案按钮
+    if st.button("提交答案", key=f"submit_{i}"):
+        correct_answer = q.get("answer", "A")
+        user_choice = selected_option.split('.')[0].strip()
+
+        if user_choice == correct_answer:
+            st.success("✅ 回答正确！")
+        else:
+            st.error(f"❌ 正确答案是：{correct_answer}")
+
+        # 显示解析（如果有）
+        if q.get("explanation"):
+            st.info(f"解析：{q.get('explanation')}")
 
 def handle_fill_in_the_blank(q, level, category, i):
     """处理选词填空题（支持拼音显示和多题一次性展示）"""
@@ -2603,123 +2706,182 @@ def handle_connect_words_into_sentence(q, level, category, i):
     # 获取当前值而不是直接赋值
     user_answer = st.text_input("请输入连成的句子", value=st.session_state[answer_key], key=answer_key)
 
+
 def handle_audio_dialogue_questions(q, level, category, i):
-    """处理听对话录音题（字典嵌套结构）"""
+    """处理听对话录音题（删除冒号前的内容，动态生成音频）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
     # 提取听力材料和问题列表
-    audio_content = q.get("audio_content", "")
+    audio_content = q.get("audio_content", [])
     questions_data = q.get("questions", [])
 
-    # 调试输出
-    # st.write("调试：questions_data =", questions_data)
+    # 确保audio_content是列表
+    if not isinstance(audio_content, list):
+        if isinstance(audio_content, str):
+            # 按常见分隔符分割字符串
+            audio_content = re.split(r'[。？！\n]', audio_content)
+            audio_content = [s.strip() for s in audio_content if s.strip()]
+        else:
+            st.error(f"无法处理audio_content类型: {type(audio_content)}")
+            return
+
+    if not audio_content:
+        st.error("错误：缺少对话内容")
+        return
 
     if not questions_data:
         st.error("错误：缺少问题数据")
         return
 
-    # 调整听力材料难度
-    adjusted_dialogue = adjust_text_by_hsk(audio_content, hsk_num)
+    # 删除冒号及其前面的内容
+    adjusted_contents = []
+    original_contents = []
 
-    # 播放对话录音
-    st.markdown("🎧 **点击播放对话录音：**")
-    dialogue_audio_file = f"temp_dialogue_{uuid.uuid4().hex}.mp3"
+    for text in audio_content:
+        original_contents.append(text)
 
-    try:
-        asyncio.run(text_to_speech(adjusted_dialogue, dialogue_audio_file, level))
-        play_audio_in_streamlit(dialogue_audio_file)
+        # 删除冒号及其前面的所有内容
+        cleaned_text = text.split('：')[-1].split(':')[-1].strip()
+        adjusted_text = adjust_text_by_hsk(cleaned_text, hsk_num)
+        adjusted_contents.append(adjusted_text)
 
-        if type_config.get("show_dialogue_text", False):
-            st.markdown(f"**对话文本：** {adjusted_dialogue}")
-    except Exception as e:
-        st.error(f"生成或播放对话录音时出错: {str(e)}")
-        return
+    # 使用上下文管理器管理临时文件
+    with manage_temp_files() as temp_files:
+        # 动态生成所有音频文件
+        audio_files = []
+        voice_types = ['female', 'male']  # 轮流使用女声和男声
 
-    # 处理每个问题
-    user_answers = {}
+        # 为每个对话内容生成音频
+        for idx, (content, original) in enumerate(zip(adjusted_contents, original_contents)):
+            # 根据索引确定使用男声还是女声（交替使用）
+            voice = voice_types[idx % len(voice_types)]
+            icon = "👩" if voice == 'female' else "👨"
 
-    for j, question_data in enumerate(questions_data):
-        # 提取问题信息
-        question_id = question_data.get("id", j + 1)
-        question_text = question_data.get("text", f"问题{question_id}")
-        options = question_data.get("options", [])
-        answer = question_data.get("answer", "")
-        explanation = question_data.get("explanation", "")
+            # 生成临时音频文件
+            audio_file = f"temp_{voice}_{uuid.uuid4().hex}.mp3"
+            temp_files.append(audio_file)
 
-        # 调试输出
-        # st.write(f"调试：处理问题 {question_id}: {question_text}")
-        # st.write(f"调试：选项 = {options}")
+            try:
+                asyncio.run(text_to_speech(content, audio_file, level, voice=voice))
+            except Exception as e:
+                st.error(f"生成第{idx + 1}句音频时出错: {str(e)}")
+                continue
 
-        if not options:
-            st.warning(f"警告：问题 {question_id} 缺少选项")
-            continue
+            # 记录音频文件和相关信息
+            audio_files.append({
+                'file': audio_file,
+                'voice': voice,
+                'icon': icon,
+                'content': content,
+                'original': original,
+                'index': idx + 1
+            })
 
-        # 生成问题音频（根据配置或问题单独设置）
-        question_audio_file = f"temp_question_{question_id}_{uuid.uuid4().hex}.mp3"
-        question_audio_enabled = question_data.get("audio_enabled", type_config.get("question_audio_enabled", True))
+            # st.write(f"{icon} 正在生成第{idx + 1}句：{original[:30]}...")
 
-        # 问题容器
-        with st.container():
-            col1, col2 = st.columns([9, 1])
+        # 合并所有对话音频
+        if not audio_files:
+            st.error("没有生成任何音频文件")
+            return
 
-            with col1:
-                st.markdown(f"### **问题 {question_id}：")
+        combined_audio = f"temp_combined_{uuid.uuid4().hex}.mp3"
+        temp_files.append(combined_audio)
 
-            with col2:
-                if question_audio_enabled:
-                    try:
-                        # 优先使用预先生成的音频路径
-                        audio_path = question_data.get("audio_path")
-                        if audio_path and os.path.exists(audio_path):
-                            st.audio(audio_path, format="audio/mp3", start_time=0)
-                        else:
-                            asyncio.run(text_to_speech(question_text, question_audio_file, level))
-                            st.audio(question_audio_file, format="audio/mp3", start_time=0)
-                    except Exception as e:
-                        st.error(f"生成或播放问题 {question_id} 音频时出错: {str(e)}")
+        try:
+            combine_audio_files([item['file'] for item in audio_files], combined_audio)
+        except Exception as e:
+            st.error(f"合并音频时出错: {str(e)}")
+            return
 
-            # 生成选项标签
-            option_labels = [f"{opt}" for opt in options]  # 选项已包含ABCD，无需重新生成
+        # 显示音频播放器
+        st.markdown("🎧 **听力内容（完整对话）：**")
+        play_audio_in_streamlit(combined_audio)
 
-            # 创建单选框
-            answer_key = f"dialogue_answer_{i}_{question_id}"
-            selected_option = st.radio(
-                label=f"请选择问题 {question_id} 的答案：",
-                options=option_labels,
-                key=answer_key
-            )
+        # 显示分段音频
+        with st.expander("查看分段音频"):
+            for item in audio_files:
+                st.markdown(f"{item['icon']} **第{item['index']}句：{item['original']}**")
+                play_audio_in_streamlit(item['file'])
 
-            # 保存用户答案
-            user_answer = selected_option.split('.')[0].strip() if selected_option else ""
-            user_answers[question_id] = (user_answer, answer, explanation)
+        # 处理每个问题
+        user_answers = {}
 
-    # 提交按钮和结果验证
-    if st.button("提交答案", key=f"submit_dialogue_{i}"):
-        correct_count = 0
+        for j, question_data in enumerate(questions_data):
+            # 提取问题信息
+            question_id = question_data.get("id", j + 1)
+            question_text = question_data.get("text", f"问题{question_id}")
+            options = question_data.get("options", [])
+            answer = question_data.get("answer", "")
+            explanation = question_data.get("explanation", "")
 
-        for question_id, (user_answer, correct_answer, explanation) in user_answers.items():
-            if user_answer == correct_answer:
-                correct_count += 1
-                result_icon = "✅"
-            else:
-                result_icon = "❌"
+            if not options:
+                st.warning(f"警告：问题 {question_id} 缺少选项")
+                continue
 
-            # 显示结果和解释
-            with st.expander(f"问题 {question_id} 结果"):
-                st.markdown(f"**你的答案：** {user_answer}")
-                st.markdown(f"**正确答案：** {correct_answer} {result_icon}")
+            # 生成问题音频
+            question_audio_file = f"temp_question_{question_id}_{uuid.uuid4().hex}.mp3"
+            temp_files.append(question_audio_file)
 
-                if explanation:
-                    st.markdown(f"**解析：** {explanation}")
+            question_audio_enabled = question_data.get("audio_enabled", type_config.get("question_audio_enabled", True))
 
-        # 显示总得分
-        score = f"{correct_count}/{len(questions_data)}"
-        st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
+            # 问题容器
+            with st.container():
+                col1, col2 = st.columns([9, 1])
 
-        # 清理临时文件
-        if os.path.exists(dialogue_audio_file):
-            os.remove(dialogue_audio_file)
+                with col1:
+                    st.markdown(f"### **问题 {question_id}：")
+
+                with col2:
+                    if question_audio_enabled:
+                        try:
+                            # 优先使用预先生成的音频路径
+                            audio_path = question_data.get("audio_path")
+                            if audio_path and os.path.exists(audio_path):
+                                st.audio(audio_path, format="audio/mp3", start_time=0)
+                            else:
+                                asyncio.run(text_to_speech(question_text, question_audio_file, level))
+                                st.audio(question_audio_file, format="audio/mp3", start_time=0)
+                        except Exception as e:
+                            st.error(f"生成或播放问题 {question_id} 音频时出错: {str(e)}")
+
+                # 生成选项标签
+                option_labels = [f"{opt}" for opt in options]
+
+                # 创建单选框
+                answer_key = f"dialogue_answer_{i}_{question_id}"
+                selected_option = st.radio(
+                    label=f"请选择问题 {question_id} 的答案：",
+                    options=option_labels,
+                    key=answer_key
+                )
+
+                # 保存用户答案
+                user_answer = selected_option.split('.')[0].strip() if selected_option else ""
+                user_answers[question_id] = (user_answer, answer, explanation)
+
+        # 提交按钮和结果验证
+        if st.button("提交答案", key=f"submit_dialogue_{i}"):
+            correct_count = 0
+
+            for question_id, (user_answer, correct_answer, explanation) in user_answers.items():
+                if user_answer == correct_answer:
+                    correct_count += 1
+                    result_icon = "✅"
+                else:
+                    result_icon = "❌"
+
+                # 显示结果和解释
+                with st.expander(f"问题 {question_id} 结果"):
+                    st.markdown(f"**你的答案：** {user_answer}")
+                    st.markdown(f"**正确答案：** {correct_answer} {result_icon}")
+
+                    if explanation:
+                        st.markdown(f"**解析：** {explanation}")
+
+            # 显示总得分
+            score = f"{correct_count}/{len(questions_data)}"
+            st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
 
 def handle_sentence_sorting(q, level, category, i):
     """句子排序题处理器"""
@@ -3630,76 +3792,92 @@ def handle_article_questions(q, level, category, i):
                 st.markdown(f"**解析**：{explanation}")
                 st.markdown("---")
 
+
 def handle_article_listening(q, level, category, i):
-    """处理听短文选择题"""
+    """处理听短文选择题（问题带音频）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 6))
 
     st.write("调试：文章选择题数据结构 =", q)
 
     # 提取题目信息
-    article_content = q.get("audio_content", "")
+    article_content = q.get("audio_content", [])  # 假设为句子列表
     questions = q.get("questions", [])
+    audio_question = q.get("audio_question", "请听问题")  # 新增问题音频内容
 
-    # 调整词汇难度
-    adjusted_article = adjust_text_by_hsk(article_content, hsk_num)
-    adjusted_questions = [
-        {
-            "question": adjust_text_by_hsk(q["question"], hsk_num),
-            "options": [adjust_text_by_hsk(option, hsk_num) for option in q["options"]],
-            "answer": q["answer"],
-            "explanation": q.get("explanation", "")
-        }
-        for q in questions
-    ]
+    # 处理文章内容（假设需要分句处理）
+    adjusted_article = [adjust_text_by_hsk(sentence, hsk_num) for sentence in article_content]
 
-    # 生成文章音频
+
+    # 生成文章音频（按句子分段生成，合并播放）
     st.markdown("🎧 **请听文章：**")
-    article_audio = f"temp_article_{uuid.uuid4().hex}.mp3"
+    article_audio_files = []
+    combined_article_audio = f"temp_article_combined_{uuid.uuid4().hex}.mp3"
 
     try:
-        # 异步生成文章音频（使用男声）
-        asyncio.run(text_to_speech(adjusted_article, article_audio, level, role='male'))
-        play_audio_in_streamlit(article_audio)
+        # 生成每句话的音频并合并
+        for idx, sentence in enumerate(adjusted_article):
+            audio_file = f"temp_article_{idx}_{uuid.uuid4().hex}.mp3"
+            asyncio.run(text_to_speech(sentence, audio_file, level, voice='male'))
+            article_audio_files.append(audio_file)
 
-        # 可选：显示文章文本
+        # 合并文章音频
+        combine_audio_files(article_audio_files, combined_article_audio)
+        play_audio_in_streamlit(combined_article_audio)
+
+        # 显示文章文本
         if type_config.get("show_audio_text", False):
             with st.expander("查看文章原文"):
-                st.markdown(adjusted_article)
+                st.markdown("\n".join(adjusted_article))
 
     except Exception as e:
         st.error(f"生成文章音频时出错: {str(e)}")
     finally:
-        st.session_state.temp_files.append(article_audio)
+        st.session_state.temp_files.extend(article_audio_files + [combined_article_audio])
+
+    # 生成问题音频
+    st.markdown("🎧 **请听问题：**")
+    question_audio_files = []
+    for j, question_data in enumerate(questions):
+        question_text = question_data["question"]
+        adjusted_question = adjust_text_by_hsk(question_text, hsk_num)
+        audio_file = f"temp_question_{i}_{j}_{uuid.uuid4().hex}.mp3"
+
+        try:
+            asyncio.run(text_to_speech(adjusted_question, audio_file, level, voice='female'))
+            question_audio_files.append(audio_file)
+        except Exception as e:
+            st.error(f"生成问题{j + 1}音频时出错: {str(e)}")
 
     # 显示问题和选项
     st.markdown("### ❓ **问题与选项：**")
-
     user_answers = {}
-    for j, question_data in enumerate(adjusted_questions):
+
+    for j, question_data in enumerate(questions):
         question_key = f'article_{i}_q{j}'
         question_text = question_data["question"]
         options = question_data["options"]
+
+        # 播放问题音频
+        st.markdown(f"#### **问题{j + 1}：**")
+        st.audio(question_audio_files[j], format="audio/mp3", start_time=0)
 
         # 保存用户答案
         if question_key not in st.session_state:
             st.session_state[question_key] = None
 
-        st.markdown(f"#### **问题{j + 1}：** {question_text}")
-
-        # 创建选项单选框
+        # st.markdown(f"**{question_text}**")
         selected_option = st.radio(
             f"请选择问题{j + 1}的答案：",
             options,
-            index=options.index(st.session_state[question_key])
-            if st.session_state[question_key] in options else 0,
+            index=options.index(st.session_state[question_key]) if st.session_state[question_key] in options else 0,
             key=f"article_{i}_options_{j}"
         )
 
         st.session_state[question_key] = selected_option
         user_answers[j] = selected_option
 
-    # 提交答案按钮
+    # 提交答案逻辑（保持不变）
     if st.button("提交答案"):
         correct_count = 0
         results = []
@@ -3708,9 +3886,7 @@ def handle_article_listening(q, level, category, i):
             user_choice = user_answers[j].split('.')[0].strip()
             correct_answer = question_data["answer"]
             is_correct = user_choice == correct_answer
-
-            if is_correct:
-                correct_count += 1
+            correct_count += 1 if is_correct else 0
 
             results.append({
                 "question_num": j + 1,
@@ -3723,15 +3899,13 @@ def handle_article_listening(q, level, category, i):
         # 显示结果
         st.markdown(f"### ✅ **答题结果：**")
         st.markdown(f"**答对：{correct_count}题 / 共{len(questions)}题**")
-
         for result in results:
             status = "✅ 正确" if result["is_correct"] else "❌ 错误"
             st.markdown(f"**问题{result['question_num']}：** {status}")
             st.markdown(f"- 你的答案：{result['user_answer']}")
             st.markdown(f"- 正确答案：{result['correct_answer']}")
-
-            if not result["is_correct"] and result["explanation"]:
-                st.info(f"**解析：** {result['explanation']}")
+            if result["explanation"]:
+                st.info(f"解析：{result['explanation']}")
 
 # 题型处理器映射
 QUESTION_HANDLERS = {
