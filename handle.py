@@ -1,0 +1,2234 @@
+# -*- coding: utf-8 -*-
+from util import *
+from config import *
+import uuid
+import asyncio
+import time
+
+
+# 题型处理器 - 策略模式实现
+TEMP_DIR = "temp_audio"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+def handle_look_and_judge1(q, level, category, i):
+    """处理看图判断题（支持男女声双语音播报）"""
+    # 获取该题型的详细配置
+    global adjusted_audio_text
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))  # 获取HSK数字等级
+
+    st.write("调试：短文选词填空题数据结构 =", q)
+
+    female_audio = None
+    male_audio = None
+
+    try:
+        # 处理听力部分
+        if type_config.get("require_audio", True):
+            audio_text = q.get("audio_content", q["content"])
+
+            # 根据HSK等级调整听力内容词汇
+            adjusted_audio_text = adjust_text_by_hsk(audio_text, hsk_num)
+
+            st.markdown("🎧 **点击播放录音题内容：**")
+
+            # 生成带路径的临时音频文件
+            female_audio = os.path.join(TEMP_DIR, f"temp_female_{uuid.uuid4().hex}.mp3")
+            male_audio = os.path.join(TEMP_DIR, f"temp_male_{uuid.uuid4().hex}.mp3")
+
+            # 分别处理男女声音频生成，避免一个失败影响另一个
+            try:
+                # 异步生成女声音频
+                asyncio.run(text_to_speech(adjusted_audio_text, female_audio, level, voice='female'))
+            except Exception as e:
+                st.error(f"女声音频生成失败：{str(e)}")
+                female_audio = None
+
+            try:
+                # 异步生成男声音频
+                asyncio.run(text_to_speech(adjusted_audio_text, male_audio, level, voice='male'))
+            except Exception as e:
+                st.error(f"男声音频生成失败：{str(e)}")
+                male_audio = None
+
+            # 播放音频（仅当音频文件存在时）
+            if female_audio and os.path.exists(female_audio):
+                st.markdown("👩 **女声朗读：**")
+                play_audio_in_streamlit(female_audio)
+
+                # 添加小延迟，确保音频播放完成
+                time.sleep(1)
+
+            if male_audio and os.path.exists(male_audio):
+                st.markdown("👨 **男声朗读：**")
+                play_audio_in_streamlit(male_audio)
+
+        # 处理图片部分
+        if type_config.get("require_image", True):
+            image_desc = q.get("image_description", q["content"])
+            st.markdown("🖼️ **根据描述生成图像：**")
+            img_bytes = generate_image_from_text(image_desc)
+            if img_bytes:
+                st.image(img_bytes, width=200)
+
+        # 显示选项
+        if q.get("options"):
+            # 根据HSK等级调整选项词汇
+            adjusted_options = [adjust_text_by_hsk(option, hsk_num) for option in q["options"]]
+
+            if f'answer_{i}' not in st.session_state:
+                st.session_state[f'answer_{i}'] = None
+
+            # 修复了之前代码中的语法错误（将中文逗号改为英文逗号）
+            selected_option = st.radio(
+                "请选择正确的答案：",
+                adjusted_options,
+                index=adjusted_options.index(st.session_state[f'answer_{i}'])
+                if st.session_state[f'answer_{i}'] in adjusted_options else 0,
+                key=f"options_{i}"
+            )
+
+            st.session_state[f'answer_{i}'] = selected_option
+
+    finally:
+        # 安全地清理临时文件
+        for file in [female_audio, male_audio]:
+            if file and os.path.exists(file):
+                try:
+                    os.remove(file)
+                except Exception as e:
+                    st.warning("")
+
+
+def handle_look_and_judge2(q, level, category, i):
+    """处理阅读看图判断题"""
+    # 获取该题型的详细配置
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+
+    st.write(q)
+    # 处理听力部分
+
+    # 处理图片部分
+    if type_config.get("require_image", True):
+        image_desc = q.get("image_description", q["content"])
+        st.markdown("🖼️ **根据描述生成图像：**")
+        img_bytes = generate_image_from_text(image_desc)
+        if img_bytes:
+            st.image(img_bytes, width=200)
+
+        # 显示题目内容
+        st.markdown(f"**题目描述：** {q.get('content', '')}")
+
+        # 显示问题
+        if q.get("questions"):
+            st.markdown(f"**问题：** {q['questions']}")
+
+    # 显示选项
+    if q.get("options"):
+        if f'answer_{i}' not in st.session_state:
+            st.session_state[f'answer_{i}'] = None
+
+        selected_option = st.radio("请选择正确的答案：",
+                                   q["options"],
+                                   index=q["options"].index(st.session_state[f'answer_{i}']) if
+                                   st.session_state[f'answer_{i}'] in q["options"] else 0,
+                                   key=f"options_{i}")
+
+        st.session_state[f'answer_{i}'] = selected_option
+
+
+def handle_look_and_choice(q, level, category, i):
+    """处理看图选择题（修复图片生成问题）"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write("调试：看图选择题数据结构 =", q)
+
+    # 处理听力部分
+    if type_config.get("require_audio", True):
+        audio_text = q.get("audio_content", q["content"])
+        adjusted_audio_text = adjust_text_by_hsk(audio_text, hsk_num)
+
+        st.markdown("🎧 **点击播放录音：**")
+        temp_audio = f"temp_{uuid.uuid4().hex}.mp3"
+        try:
+            asyncio.run(text_to_speech(adjusted_audio_text, temp_audio, level))
+            play_audio_in_streamlit(temp_audio)
+        finally:
+            if os.path.exists(temp_audio):
+                os.remove(temp_audio)
+
+    # 处理图片部分
+    if type_config.get("require_image", True):
+        st.markdown("🖼️ **请选择对应的图片：**")
+
+        # 从options生成图片描述
+        image_descriptions = []
+        for j, option in enumerate(q.get("options", [])):
+            # 提取选项文本（去除选项前缀）
+            option_text = re.sub(r'^[A-Da-d]\.?\s*', '', option).strip()
+            image_descriptions.append(option_text)
+
+        # 生成并显示图片
+        if image_descriptions:
+            cols = st.columns(len(image_descriptions))
+            for j, img_desc in enumerate(image_descriptions):
+                img_bytes = generate_image_from_text(img_desc)
+                if img_bytes:
+                    cols[j].image(img_bytes, width=150)
+                    cols[j].caption(f"选项{chr(65 + j)}: {img_desc}")
+
+    # 显示问题
+    if q.get("question"):
+        adjusted_question = adjust_text_by_hsk(q["question"], hsk_num)
+        st.markdown(f"**问题：** {adjusted_question}")
+
+    # 显示文本选项
+    if q.get("options"):
+        adjusted_options = [f"{chr(65 + j)}. {adjust_text_by_hsk(option, hsk_num)}"
+                            for j, option in enumerate(q.get("options", []))]
+
+        # 预初始化session_state
+        answer_key = f'answer_{i}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = None
+
+        # 创建单选框
+        selected_option = st.radio(
+            "请选择正确的答案：",
+            adjusted_options,
+            index=next(
+                (idx for idx, opt in enumerate(adjusted_options)
+                 if opt.startswith(f"{q.get('answer', 'A')}.")),
+                0
+            ),
+            key=answer_key
+        )
+
+        # 存储答案（只在提交后处理，避免状态修改错误）
+        if st.button("提交答案"):
+            st.session_state[answer_key] = selected_option.split('.')[0].strip()
+
+            # 显示结果
+            correct_answer = q.get('answer', 'A')
+            user_choice = st.session_state[answer_key]
+
+            if user_choice == correct_answer:
+                st.success("✓ 回答正确！")
+            else:
+                st.error(f"✗ 正确答案：{correct_answer}")
+
+            if q.get("explanation"):
+                st.info(f"解析：{q.get('explanation')}")
+
+
+def handle_image_sorting(q, level, category, i):
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    dialogues = q.get("dialogues", [])
+    options = q.get("options", [])
+    answers = q.get("answers", [])
+
+    # 尝试从不同字段获取对话
+    dialogues = q.get("dialogues", [])
+
+    # 如果dialogues为空，尝试其他可能的字段
+    if not dialogues:
+        dialogues = q.get("sentences", [])  # 尝试sentences字段
+
+    if not dialogues:
+        # 尝试从audio_content字段分割对话（假设用|分隔）
+        audio_content = q.get("audio_content", "")
+        if audio_content:
+            dialogues = audio_content.split("|")
+            dialogues = [d.strip() for d in dialogues if d.strip()]  # 过滤空对话
+
+    # 如果还是没有对话，尝试检查单独的对话字段（如dialogue1, dialogue2...）
+    if not dialogues:
+        dialogues = []
+        for j in range(1, 6):  # 尝试dialogue1到dialogue5
+            key = f"dialogue{j}"
+            if key in q and q[key]:
+                dialogues.append(q[key])
+
+    # 验证对话数量
+    if len(dialogues) != 5:
+        st.error(f"对话数量不正确，需要5段对话，但实际有 {len(dialogues)} 段。请检查数据格式。")
+        st.json(q)  # 显示原始数据，帮助调试
+        return
+
+    st.markdown(f"### {type_config.get('question_format', '请根据听到的五段对话，将图片按对应顺序排列')}")
+
+    # 播放五段对话录音
+    st.markdown("### 听力对话")
+    for j, dialogue in enumerate(dialogues):
+        adjusted_dialogue = adjust_text_by_hsk(dialogue, hsk_num)
+        audio_path = f"temp_{uuid.uuid4().hex}.mp3"
+        try:
+            asyncio.run(text_to_speech(adjusted_dialogue, audio_path, level))
+            st.markdown(f"**对话 {j + 1}：**")
+            play_audio_in_streamlit(audio_path)
+        except Exception as e:
+            st.error(f"对话 {j + 1} 音频生成失败: {str(e)}")
+        finally:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+
+    # 显示选项
+    st.markdown("### 选项")
+    cols = st.columns(len(options))
+    for k, option in enumerate(options):
+        img_bytes = generate_image_from_text(option)
+        if img_bytes:
+            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}")
+        else:
+            cols[k].markdown(f"{chr(65 + k)}. {option}")
+
+    # 用户选择区域
+    selected_order = []
+    for j in range(len(dialogues)):
+        answer_key = f'answer_{i}_{j}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = ""
+
+        selected_option = st.selectbox(
+            f"请为对话 {j + 1} 选择对应的图片选项：",
+            [chr(65 + k) for k in range(len(options))],
+            index=next(
+                (idx for idx, opt in enumerate([chr(65 + k) for k in range(len(options))])
+                 if opt == st.session_state[answer_key]),
+                0
+            ),
+            key=f"sorting_{i}_{j}"
+        )
+        selected_order.append(selected_option)
+        st.session_state[answer_key] = selected_option
+
+    # 显示答案与解析
+    with st.expander("查看答案与解析", expanded=False):
+        st.success(f"正确的图片顺序：{' -> '.join(answers)}")
+        explanation = q.get("explanations", [""])
+        st.info(type_config.get('explanation_format', '').format(explanation=explanation))
+
+
+def handle_listening(q, level, category, i):
+    """处理听力选择题（动态读取audio_content并自动分配男女声，删除冒号前的内容）"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write("调试：听力选择题数据结构 =", q)
+
+    # 提取题目信息
+    audio_content = q.get("audio_content", [])  # 确保是列表
+    question = q.get("audio_question", "")
+    options = q.get("options", [])
+
+    # 验证数据有效性
+    if not audio_content:
+        st.error("错误：未找到听力对话内容")
+        return
+
+    # 删除冒号及其前面的内容
+    adjusted_contents = []
+    original_contents = []  # 保留原始内容用于显示
+
+    for text in audio_content:
+        original_contents.append(text)
+
+        # 删除冒号及其前面的所有内容
+        cleaned_text = text.split('：')[-1].split(':')[-1].strip()
+        adjusted_text = adjust_text_by_hsk(cleaned_text, hsk_num)
+        adjusted_contents.append(adjusted_text)
+
+    adjusted_question = adjust_text_by_hsk(question, hsk_num)
+    adjusted_options = [adjust_text_by_hsk(option, hsk_num) for option in options]
+
+    # 动态生成所有音频文件
+    audio_files = []
+    voice_types = ['female', 'male']  # 轮流使用女声和男声
+
+    try:
+        # 为每个对话内容生成音频
+        for idx, (content, original) in enumerate(zip(adjusted_contents, original_contents)):
+            # 根据索引确定使用男声还是女声（交替使用）
+            voice = voice_types[idx % len(voice_types)]
+            icon = "👩" if voice == 'female' else "👨"
+
+            # 生成临时音频文件
+            audio_file = f"temp_{voice}_{uuid.uuid4().hex}.mp3"
+            asyncio.run(text_to_speech(content, audio_file, level, voice=voice))
+
+            # 记录音频文件和相关信息
+            audio_files.append({
+                'file': audio_file,
+                'voice': voice,
+                'icon': icon,
+                'content': content,
+                'original': original  # 保留原始带前缀的内容用于显示
+            })
+
+            # st.write(f"{icon} 正在生成：{original[:30]}...")
+
+        # 生成问题音频（使用女声）
+        question_audio = f"temp_question_{uuid.uuid4().hex}.mp3"
+        asyncio.run(text_to_speech(adjusted_question, question_audio, level, voice='female'))
+
+        # 合并所有对话音频
+        combined_audio = f"temp_combined_{uuid.uuid4().hex}.mp3"
+        combine_audio_files([item['file'] for item in audio_files], combined_audio)
+
+        # 显示音频播放器
+        st.markdown("🎧 **听力内容（完整对话）：**")
+        play_audio_in_streamlit(combined_audio)
+
+        # 显示分段音频（带原始前缀信息）
+        with st.expander("查看分段音频"):
+            for item in audio_files:
+                st.markdown(f"{item['icon']} **{item['original']}**")
+                play_audio_in_streamlit(item['file'])
+
+        st.markdown("**问题：**")
+        play_audio_in_streamlit(question_audio)
+
+        # 记录所有临时文件以便清理
+        if 'temp_files' not in st.session_state:
+            st.session_state.temp_files = []
+        st.session_state.temp_files.extend([combined_audio, question_audio] +
+                                           [item['file'] for item in audio_files])
+
+    except Exception as e:
+        st.error(f"生成或播放录音时出错: {str(e)}")
+    finally:
+        # 确保所有临时文件都被记录以便清理
+        if 'temp_files' not in st.session_state:
+            st.session_state.temp_files = []
+        st.session_state.temp_files.extend([item['file'] for item in audio_files])
+
+        # 添加清理按钮
+    if st.button("清理临时文件", key=f"clean_{i}"):
+        cleanup_temp_files()
+        st.success("临时文件已清理！")
+
+    # 显示问题和选项
+    if f'answer_{i}' not in st.session_state:
+        st.session_state[f'answer_{i}'] = None
+
+    option_labels = [f"{chr(65 + j)}. {option}" for j, option in enumerate(adjusted_options)]
+
+    selected_option = st.radio(
+        "请选择正确的答案：",
+        option_labels,
+        index=option_labels.index(st.session_state[f'answer_{i}'])
+        if st.session_state[f'answer_{i}'] in option_labels else 0,
+        key=f"listening_options_{i}"
+    )
+
+    st.session_state[f'answer_{i}'] = selected_option
+
+    # 提交答案按钮
+    if st.button("提交答案", key=f"submit_{i}"):
+        correct_answer = q.get("answer", "A")
+        user_choice = selected_option.split('.')[0].strip()
+
+        if user_choice == correct_answer:
+            st.success("✅ 回答正确！")
+        else:
+            st.error(f"❌ 正确答案是：{correct_answer}")
+
+        # 显示解析（如果有）
+        if q.get("explanation"):
+            st.info(f"解析：{q.get('explanation')}")
+
+def handle_fill_in_the_blank(q, level, category, i):
+    """处理选词填空题（支持拼音显示和多题一次性展示）"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+    show_pinyin = type_config.get("show_pinyin")
+    max_questions = type_config.get("max_questions", 5)
+
+    st.write("调试：阅读选择题数据结构 =", q)
+
+    # ------------------------------
+    # 1. 数据校验
+    # ------------------------------
+    sentences = q.get("sentences", [])
+    options = q.get("options", [])
+
+    if len(sentences) == 0:
+        st.error("错误：请至少添加1道题")
+        return
+
+    if len(sentences) > max_questions:
+        st.warning(f"警告：最多支持{max_questions}道题，已截断多余题目")
+        sentences = sentences[:max_questions]
+
+    if len(options) != 5:  # 固定5个选项
+        st.error("错误：必须包含5个选项（A-E）")
+        return
+
+    # ------------------------------
+    # 2. 文本处理（拼音和难度调整）
+    # ------------------------------
+    adjusted_sentences = []
+    for sentence in sentences:
+        # 调整词汇难度（示例逻辑，需根据实际实现）
+        adjusted_sentence = adjust_text_by_hsk(sentence, hsk_num)
+
+        # 生成带拼音的句子（可选）
+        if show_pinyin:
+            adjusted_text = adjust_text_by_hsk(sentence, hsk_num)
+            pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+            adjusted_sentences.append(f"{adjusted_sentence} （拼音：{pinyin_text}）")
+        else:
+            adjusted_sentences.append(adjusted_sentence)
+
+    adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]
+
+    # ------------------------------
+    # 3. 显示题目（先显示所有句子，再统一显示选项）
+    # ------------------------------
+    st.markdown(f"### HSK{hsk_num} 选词填空题（共{len(sentences)}道题）")
+
+    # 显示所有句子
+    for idx, sentence in enumerate(adjusted_sentences, 1):
+        st.markdown(f"**第{idx}题：** {sentence}")
+
+    # 显示选项（一次性展示5个选项）
+    st.markdown("### 选项（ABCDE对应5个选项）：")
+    option_labels = [f"{chr(65 + j)}. {opt}" for j, opt in enumerate(adjusted_options)]
+    st.markdown("  ".join(option_labels))  # 横向显示选项
+
+    # ------------------------------
+    # 4. 答案选择（使用隐藏输入匹配选项）
+    # ------------------------------
+    user_answers = {}
+    for idx in range(len(sentences)):
+        # 每个题目使用独立的key
+        key = f"fill_answer_{i}_{idx}"
+        user_answer = st.text_input(
+            f"请为第{idx + 1}题选择答案（输入A-E）",
+            key=key,
+            max_chars=1,
+            placeholder="A"
+        ).upper()
+
+        # 验证答案格式
+        if user_answer in ["A", "B", "C", "D", "E"]:
+            user_answers[idx + 1] = user_answer  # 存储题号对应的答案
+        else:
+            user_answers[idx + 1] = ""  # 无效输入视为未答
+
+    # ------------------------------
+    # 5. 提交与结果验证
+    # ------------------------------
+    if st.button(f"提交第{i + 1}组填空题答案", key=f"submit_fill_{i}"):
+        correct_count = 0
+        for idx, (sentence, correct_option) in enumerate(zip(sentences, q.get("answers", []))):
+            question_id = idx + 1
+            user_answer = user_answers.get(question_id, "")
+            correct_answer = correct_option.upper()
+
+            with st.expander(f"第{question_id}题 结果"):
+                st.markdown(f"**题目：** {sentence}")
+                st.markdown(f"**你的答案：** {user_answer}")
+                st.markdown(f"**正确答案：** {correct_answer} {'✅' if user_answer == correct_answer else '❌'}")
+
+                # 显示选项对应的词语（可选）
+                if user_answer:
+                    selected_word = adjusted_options[ord(user_answer) - 65]  # A->0, B->1...
+                    st.markdown(f"**选项含义：** {selected_word}")
+
+        score = f"{correct_count}/{len(sentences)}"
+        st.success(f"得分：{score} ({correct_count / len(sentences):.0%})")
+
+def handle_text_judgment1(q, level, category, i):
+    """处理文字判断题"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write(q)
+
+    # 提取题目信息
+    audio_content = q.get("audio_content", "")
+    target_sentence = q.get("target_sentence", "")
+    options = type_config.get("options", ["对", "错"])
+
+    # 调整词汇
+    adjusted_audio_content = adjust_text_by_hsk(audio_content, hsk_num)
+    adjusted_target_sentence = adjust_text_by_hsk(target_sentence, hsk_num)
+
+    # 播放录音
+    st.markdown("🎧 **点击播放录音：**")
+    temp_audio = f"temp_{uuid.uuid4().hex}.mp3"
+
+    try:
+        asyncio.run(text_to_speech(adjusted_audio_content, temp_audio, level))
+        play_audio_in_streamlit(temp_audio)
+    except Exception as e:
+        st.error(f"生成或播放录音时出错: {str(e)}")
+    finally:
+        if os.path.exists(temp_audio):
+            os.remove(temp_audio)
+
+    # 显示带标记的完整句子
+
+    # 显示问题和需要判断的句子
+    st.markdown("### 问题：")
+    st.markdown(f"请判断 **※{adjusted_target_sentence}※** 是否正确")
+
+    # 显示选项
+    if f'answer_{i}' not in st.session_state:
+        st.session_state[f'answer_{i}'] = None
+
+    selected_option = st.radio(
+        "请选择：",
+        options,
+        index=options.index(st.session_state[f'answer_{i}']) if
+        st.session_state[f'answer_{i}'] in options else 0,
+        key=f"judgment_options_{i}"
+    )
+
+    st.session_state[f'answer_{i}'] = selected_option
+
+def handle_sentence_matching1(q, level, category, i):
+    """处理句子匹配题（包括问答匹配题）"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    # 提取题目信息
+    questions = q.get("questions", [])
+    options = q.get("options", [])
+    answers = q.get("answers", [])
+
+    # 调试输出
+    st.write(f"处理问答匹配题 - 问题数量: {len(questions)}, 选项数量: {len(options)}")
+
+    # 调整词汇并添加拼音
+    adjusted_questions = []
+    for question in questions:
+        # 处理问题可能是字符串或字典的情况
+        if isinstance(question, str):
+            adjusted_text = adjust_text_by_hsk(question, hsk_num)
+            pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+            adjusted_questions.append({
+                "text": adjusted_text,
+                "pinyin": pinyin_text,
+                "index": str(len(adjusted_questions) + 1)
+            })
+        else:  # 字典格式
+            question_text = question.get("text", "")
+            adjusted_text = adjust_text_by_hsk(question_text, hsk_num)
+            pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+            adjusted_questions.append({
+                "text": adjusted_text,
+                "pinyin": pinyin_text,
+                "index": question.get("index", str(len(adjusted_questions) + 1))
+            })
+
+    adjusted_options = []
+    for idx, option in enumerate(options):
+        # 处理选项可能是字符串或字典的情况
+        if isinstance(option, str):
+            adjusted_text = adjust_text_by_hsk(option, hsk_num)
+            pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+        else:  # 字典格式
+            option_text = option.get("text", "")
+            adjusted_text = adjust_text_by_hsk(option_text, hsk_num)
+            pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+
+        option_label = type_config.get("options", ["A", "B", "C", "D", "E", "F", "G"])[idx]
+        adjusted_options.append({
+            "text": adjusted_text,
+            "pinyin": pinyin_text,
+            "label": option_label
+        })
+
+    # 显示问题
+    st.markdown("### 请为下列问题选择最合适的回答：")
+    for j, question in enumerate(adjusted_questions):
+        question_format = type_config.get("question_format", "{index}. {question_text}")
+        question_display = question_format.format(
+            index=question.get("index", j + 1),
+            question_text=question.get("pinyin", question.get("text", ""))
+        )
+        st.markdown(f"**{question_display}**")
+
+        # 调试输出
+        st.write(f"问题 {j + 1}: {question_display}")
+
+        # 为每个问题创建独立的选择
+        answer_key = f'answer_{i}_{j}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = answers[j] if j < len(answers) else ""
+
+        option_labels = [
+            f"{opt['label']}. {opt['pinyin']}"
+            for opt in adjusted_options
+        ]
+
+        # 调试输出
+        st.write(f"选项: {option_labels}")
+
+        selected_option = st.radio(
+            f"请选择答案（问题 {j + 1}）:",
+            option_labels,
+            index=next(
+                (idx for idx, opt in enumerate(option_labels)
+                 if opt.startswith(f"{st.session_state[answer_key]}.")),
+                0
+            ),
+            key=f"matching_{i}_{j}"
+        )
+
+        st.session_state[answer_key] = selected_option.split('.')[0].strip()
+
+def handle_text_judgment2(q, level, category, i):
+    """处理阅读判断题"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write(q)
+
+    # 提取题目信息
+    content = q.get("content", "")  # 阅读文本
+    question = q.get("question", "")  # 需要判断的问题
+    answer = q.get("answer", "")  # 正确答案
+    explanation = q.get("explanation", "")  # 答案解析
+
+    # 调整词汇并添加拼音
+    adjusted_content = adjust_text_by_hsk(content, hsk_num)
+    adjusted_question = adjust_text_by_hsk(question, hsk_num)
+
+    if type_config.get("show_pinyin", False):
+        content_with_pinyin = add_pinyin(adjusted_content)
+        question_with_pinyin = add_pinyin(adjusted_question)
+    else:
+        content_with_pinyin = adjusted_content
+        question_with_pinyin = adjusted_question
+
+    # 显示阅读文本
+    st.markdown("### 阅读文本：")
+    st.markdown(content_with_pinyin)
+
+    # 显示问题
+    st.markdown("### 问题：")
+    st.markdown(f"{type_config.get('question_format', '判断下列陈述是否正确：')}")
+    st.markdown(f"**{question_with_pinyin}**")
+
+    # 显示选项
+    options = type_config.get("options", ["对", "错"])
+
+    answer_key = f'answer_{i}'
+    if answer_key not in st.session_state:
+        st.session_state[answer_key] = answer if answer in options else options[0]
+
+    selected_option = st.radio(
+        "请选择：",
+        options,
+        index=options.index(st.session_state[answer_key]),
+        key=f"judgment_{i}"
+    )
+
+    st.session_state[answer_key] = selected_option
+
+def handle_sentence_matching2(q, level, category, i):
+    """处理句子匹配题"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+    min_words = type_config.get("min_words")  # 获取最小字数
+
+    # 提取题目信息
+    sentences = q.get("sentences", [])  # 题干句子
+    options = q.get("options", [])  # 选项句子
+    answers = q.get("answers", [])  # 正确答案
+    explanations = q.get("explanations", [])  # 答案解析
+
+    # 调整词汇并添加拼音
+    adjusted_sentences = []
+    for idx, sentence in enumerate(sentences):
+        if isinstance(sentence, str):
+            sentence_text = sentence
+            sentence_index = str(idx + 1)
+        else:  # 字典格式
+            sentence_text = sentence.get("text", "")
+            sentence_index = sentence.get("index", str(idx + 1))
+
+        adjusted_text = adjust_text_by_hsk(sentence_text, hsk_num)
+        pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+        adjusted_sentences.append({
+            "text": adjusted_text,
+            "pinyin": pinyin_text,
+            "index": sentence_index
+        })
+
+    adjusted_options = []
+    for idx, option in enumerate(options):
+        if isinstance(option, str):
+            option_text = option
+        else:  # 字典格式
+            option_text = option.get("text", "")
+
+        adjusted_text = adjust_text_by_hsk(option_text, hsk_num)
+        pinyin_text = add_pinyin(adjusted_text) if type_config.get("show_pinyin", True) else adjusted_text
+        option_label = chr(65 + idx)  # A, B, C, ...
+        adjusted_options.append({
+            "text": adjusted_text,
+            "pinyin": pinyin_text,
+            "label": option_label
+        })
+
+    # 显示题目说明
+    st.markdown(f"### {type_config.get('question_format', '为下列句子选择最合适的答句：')}")
+
+    # 为每个句子创建匹配选项
+    for j, sentence in enumerate(adjusted_sentences):
+        sentence_display = f"{sentence.get('index')}. {sentence.get('pinyin')}"
+        st.markdown(f"**{sentence_display}**")
+
+        answer_key = f'answer_{i}_{j}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = answers[j] if j < len(answers) else ""
+
+        option_labels = [
+            f"{opt['label']}. {opt['pinyin']}"
+            for opt in adjusted_options
+        ]
+
+        selected_option = st.radio(
+            f"请选择匹配项（句子 {sentence.get('index')}）:",
+            option_labels,
+            index=next(
+                (idx for idx, opt in enumerate(option_labels)
+                 if opt.startswith(f"{st.session_state[answer_key]}.")),
+                0
+            ),
+            key=f"matching_{i}_{j}"
+        )
+
+        st.session_state[answer_key] = selected_option.split('.')[0].strip()
+
+def handle_reading_comprehension(q, level, category, i):
+    """处理阅读理解题"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    # 处理文章段落
+    passages = q.get("passages", [])
+    if isinstance(passages, str):
+        st.warning("注意：passages字段应为列表，已将字符串转换为列表")
+        passages = [passages]
+
+    # 处理问题列表
+    questions = q.get("questions", [])
+
+    # 兼容旧格式（单个问题）
+    if not questions and "question" in q:
+        st.warning("注意：使用了旧格式的question字段，已转换为questions列表")
+        question_text = q.get("question", "")
+        options = q.get("options", [])
+        if isinstance(options, dict):
+            st.warning("注意：options字段应为列表，已将字典转换为列表")
+            options = [v for k, v in sorted(options.items())]
+
+        if question_text and options:
+            questions = [{
+                "text": question_text,
+                "options": options,
+                "answer": q.get("answer", "")
+            }]
+        else:
+            st.error("无法从question字段构建有效问题，请检查数据")
+            return
+
+    # 验证问题列表
+    if not isinstance(questions, list) or len(questions) == 0:
+        st.error(f"题目数据错误：questions字段应为非空列表，当前值: {questions}")
+        return
+
+    # 显示文章
+    st.markdown("### 阅读文章：")
+    for passage in passages:
+        adjusted_passage = adjust_text_by_hsk(passage, hsk_num)
+        st.markdown(adjusted_passage)
+
+    # 显示问题和选项
+    st.markdown(f"### {type_config.get('question_format', '根据短文内容，回答问题：')}")
+
+    # 处理每个问题
+    for j, question in enumerate(questions, 1):
+        if not isinstance(question, dict):
+            st.error(f"问题 {j} 格式错误：应为字典，当前值: {question}")
+            return
+
+        question_text = question.get("text", "")
+        if not question_text.strip():
+            st.error(f"问题 {j} 缺少text字段或text为空")
+            return
+
+        options = question.get("options", [])
+        if not isinstance(options, list) or len(options) < 2:
+            st.error(f"问题 {j} 的options字段应为至少包含两个选项的列表")
+            return
+
+        # 调整问题和选项的词汇
+        adjusted_question_text = adjust_text_by_hsk(question_text, hsk_num)
+        adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]
+
+        # 显示问题
+        st.markdown(f"**问题 {j}：** {adjusted_question_text}")
+
+        # 选项格式
+        option_format = type_config.get("options_format", "{label}. {option_text}")
+        option_labels = [
+            option_format.format(label=chr(65 + k), option_text=opt)
+            for k, opt in enumerate(adjusted_options)
+        ]
+
+        # 存储用户答案的键
+        answer_key = f'answer_{i}_{j}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = ""
+
+        # 获取正确答案
+        correct_answer = question.get("answer", "")
+        if correct_answer and isinstance(correct_answer, str) and correct_answer.isalpha():
+            correct_answer = correct_answer.upper()
+            # 找到正确答案在选项中的索引
+            correct_index = next(
+                (idx for idx, opt in enumerate(option_labels) if opt.startswith(f"{correct_answer}.")),
+                0
+            )
+        else:
+            correct_index = 0
+
+        # 显示选项并获取用户选择
+        selected_option = st.radio(
+            f"请选择问题 {j} 的答案：",
+            option_labels,
+            index=next(
+                (idx for idx, opt in enumerate(option_labels)
+                 if opt.startswith(f"{st.session_state[answer_key]}.")),
+                0
+            ),
+            key=f"reading_options_{i}_{j}"
+        )
+
+        # 保存用户选择
+        st.session_state[answer_key] = selected_option.split('.')[0].strip()
+
+def handle_image_matching(q, level, category, i):
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = get_hsk_level(level)
+
+    st.write(q)
+
+    sentences = q.get("sentences", [])
+    options = q.get("options", [])
+    answers = q.get("answers", [])
+
+    st.markdown(f"### {type_config.get('question_format', '请将句子与对应的图片描述匹配')}")
+
+    # 显示所有句子
+    for j, sentence in enumerate(sentences):
+        st.markdown(f"**句子 {j + 1}：** {sentence}")
+
+    st.markdown("### 选项")
+    cols = st.columns(len(options))
+    for k, option in enumerate(options):
+        img_bytes = generate_image_from_text(option)
+        if img_bytes:
+            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}")
+
+    # 让用户为每个句子选择匹配的图片描述
+    for j in range(len(sentences)):
+        answer_key = f'answer_{i}_{j}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = ""
+
+        selected_option = st.radio(
+            f"请为句子 {j + 1} 选择匹配的图片描述：",
+            [chr(65 + k) for k in range(len(options))],
+            index=next(
+                (idx for idx, opt in enumerate([chr(65 + k) for k in range(len(options))])
+                 if opt == st.session_state[answer_key]),
+                0
+            ),
+            key=f"matching_{i}_{j}"
+        )
+
+        st.session_state[answer_key] = selected_option
+
+    with st.expander("查看答案与解析", expanded=False):
+        for j, correct_answer in enumerate(answers):
+            st.success(f"句子 {j + 1} 的正确答案：{correct_answer}")
+            explanation = q.get("explanations", [""])[j]
+            st.info(type_config.get('explanation_format', '').format(explanation=explanation))
+
+def handle_connect_words_into_sentence(q, level, category, i):
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = get_hsk_level(level)
+
+    words = q.get("words", [])  # 待连成句子的词语列表
+    correct_answer = q.get("answer", "")  # 正确答案
+    explanation = q.get("explanation", "")  # 答案解析
+
+    st.markdown(f"### {type_config.get('question_format', '请将下列词语连成一个完整的句子：')}")
+
+    # 显示词语，根据配置决定是否显示拼音
+    word_display = []
+    for word in words:
+        if type_config.get("show_pinyin", False):
+            word_display.append(add_pinyin(word))
+        else:
+            word_display.append(word)
+    st.markdown(", ".join(word_display))
+
+    # 让用户输入连成的句子
+    answer_key = f'answer_{i}'
+
+    # 初始化session_state值，如果不存在的话
+    if answer_key not in st.session_state:
+        st.session_state[answer_key] = ""
+
+    # 获取当前值而不是直接赋值
+    user_answer = st.text_input("请输入连成的句子", value=st.session_state[answer_key], key=answer_key)
+
+
+def handle_audio_dialogue_questions(q, level, category, i):
+    """处理听对话录音题（删除冒号前的内容，动态生成音频）"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    # 提取听力材料和问题列表
+    audio_content = q.get("audio_content", [])
+    questions_data = q.get("questions", [])
+
+    # 确保audio_content是列表
+    if not isinstance(audio_content, list):
+        if isinstance(audio_content, str):
+            # 按常见分隔符分割字符串
+            audio_content = re.split(r'[。？！\n]', audio_content)
+            audio_content = [s.strip() for s in audio_content if s.strip()]
+        else:
+            st.error(f"无法处理audio_content类型: {type(audio_content)}")
+            return
+
+    if not audio_content:
+        st.error("错误：缺少对话内容")
+        return
+
+    if not questions_data:
+        st.error("错误：缺少问题数据")
+        return
+
+    # 删除冒号及其前面的内容
+    adjusted_contents = []
+    original_contents = []
+
+    for text in audio_content:
+        original_contents.append(text)
+
+        # 删除冒号及其前面的所有内容
+        cleaned_text = text.split('：')[-1].split(':')[-1].strip()
+        adjusted_text = adjust_text_by_hsk(cleaned_text, hsk_num)
+        adjusted_contents.append(adjusted_text)
+
+    # 使用上下文管理器管理临时文件
+    with manage_temp_files() as temp_files:
+        # 动态生成所有音频文件
+        audio_files = []
+        voice_types = ['female', 'male']  # 轮流使用女声和男声
+
+        # 为每个对话内容生成音频
+        for idx, (content, original) in enumerate(zip(adjusted_contents, original_contents)):
+            # 根据索引确定使用男声还是女声（交替使用）
+            voice = voice_types[idx % len(voice_types)]
+            icon = "👩" if voice == 'female' else "👨"
+
+            # 生成临时音频文件
+            audio_file = f"temp_{voice}_{uuid.uuid4().hex}.mp3"
+            temp_files.append(audio_file)
+
+            try:
+                asyncio.run(text_to_speech(content, audio_file, level, voice=voice))
+            except Exception as e:
+                st.error(f"生成第{idx + 1}句音频时出错: {str(e)}")
+                continue
+
+            # 记录音频文件和相关信息
+            audio_files.append({
+                'file': audio_file,
+                'voice': voice,
+                'icon': icon,
+                'content': content,
+                'original': original,
+                'index': idx + 1
+            })
+
+            # st.write(f"{icon} 正在生成第{idx + 1}句：{original[:30]}...")
+
+        # 合并所有对话音频
+        if not audio_files:
+            st.error("没有生成任何音频文件")
+            return
+
+        combined_audio = f"temp_combined_{uuid.uuid4().hex}.mp3"
+        temp_files.append(combined_audio)
+
+        try:
+            combine_audio_files([item['file'] for item in audio_files], combined_audio)
+        except Exception as e:
+            st.error(f"合并音频时出错: {str(e)}")
+            return
+
+        # 显示音频播放器
+        st.markdown("🎧 **听力内容（完整对话）：**")
+        play_audio_in_streamlit(combined_audio)
+
+        # 显示分段音频
+        with st.expander("查看分段音频"):
+            for item in audio_files:
+                st.markdown(f"{item['icon']} **第{item['index']}句：{item['original']}**")
+                play_audio_in_streamlit(item['file'])
+
+        # 处理每个问题
+        user_answers = {}
+
+        for j, question_data in enumerate(questions_data):
+            # 提取问题信息
+            question_id = question_data.get("id", j + 1)
+            question_text = question_data.get("text", f"问题{question_id}")
+            options = question_data.get("options", [])
+            answer = question_data.get("answer", "")
+            explanation = question_data.get("explanation", "")
+
+            if not options:
+                st.warning(f"警告：问题 {question_id} 缺少选项")
+                continue
+
+            # 生成问题音频
+            question_audio_file = f"temp_question_{question_id}_{uuid.uuid4().hex}.mp3"
+            temp_files.append(question_audio_file)
+
+            question_audio_enabled = question_data.get("audio_enabled", type_config.get("question_audio_enabled", True))
+
+            # 问题容器
+            with st.container():
+                col1, col2 = st.columns([9, 1])
+
+                with col1:
+                    st.markdown(f"### **问题 {question_id}：")
+
+                with col2:
+                    if question_audio_enabled:
+                        try:
+                            # 优先使用预先生成的音频路径
+                            audio_path = question_data.get("audio_path")
+                            if audio_path and os.path.exists(audio_path):
+                                st.audio(audio_path, format="audio/mp3", start_time=0)
+                            else:
+                                asyncio.run(text_to_speech(question_text, question_audio_file, level))
+                                st.audio(question_audio_file, format="audio/mp3", start_time=0)
+                        except Exception as e:
+                            st.error(f"生成或播放问题 {question_id} 音频时出错: {str(e)}")
+
+                # 生成选项标签
+                option_labels = [f"{opt}" for opt in options]
+
+                # 创建单选框
+                answer_key = f"dialogue_answer_{i}_{question_id}"
+                selected_option = st.radio(
+                    label=f"请选择问题 {question_id} 的答案：",
+                    options=option_labels,
+                    key=answer_key
+                )
+
+                # 保存用户答案
+                user_answer = selected_option.split('.')[0].strip() if selected_option else ""
+                user_answers[question_id] = (user_answer, answer, explanation)
+
+        # 提交按钮和结果验证
+        if st.button("提交答案", key=f"submit_dialogue_{i}"):
+            correct_count = 0
+
+            for question_id, (user_answer, correct_answer, explanation) in user_answers.items():
+                if user_answer == correct_answer:
+                    correct_count += 1
+                    result_icon = "✅"
+                else:
+                    result_icon = "❌"
+
+                # 显示结果和解释
+                with st.expander(f"问题 {question_id} 结果"):
+                    st.markdown(f"**你的答案：** {user_answer}")
+                    st.markdown(f"**正确答案：** {correct_answer} {result_icon}")
+
+                    if explanation:
+                        st.markdown(f"**解析：** {explanation}")
+
+            # 显示总得分
+            score = f"{correct_count}/{len(questions_data)}"
+            st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
+
+def handle_sentence_sorting(q, level, category, i):
+    """句子排序题处理器"""
+    config = DETAILED_QUESTION_CONFIG[level][category]["句子排序题"]
+    sentences = q.get("sentences", [])  # 原始句子列表（乱序）
+    correct_order = q.get("answer", [])  # 正确顺序（如 ["C", "B", "A"]）
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
+
+    # 提取标签和内容
+    labels = [sentence.split('.')[0] for sentence in sentences]
+    contents = [sentence.split('.', 1)[1].strip() for sentence in sentences]
+
+    st.subheader(f"句子排序题 #{i + 1}")
+    st.markdown(f"**题目：** {config['question_content']}", hsk_num)
+    st.markdown(f"**提示：** {config['sort_hint']}")
+
+    # 显示原始句子
+    st.markdown("### 请将下列句子按正确顺序排列：")
+    for idx, content in enumerate(contents):
+        st.markdown(f"{labels[idx]}. {content}")
+
+    # 创建排序选择器
+    available_labels = labels.copy()
+    user_order = []
+
+    for position in range(len(labels)):
+        selected_label = st.selectbox(
+            f"第 {position + 1} 句的正确标签是：",
+            available_labels,
+            key=f"sort_{i}_{position}"
+        )
+        user_order.append(selected_label)
+        available_labels.remove(selected_label)
+
+    if st.button("提交答案", key=f"submit_{i}"):
+        if user_order == correct_order:
+            st.success("回答正确！")
+        else:
+            st.error("回答错误，请重新尝试。")
+
+        # 显示解析
+        explanation = q.get("explanation", "请根据逻辑关系排序。")
+        st.markdown(config["explanation_format"].format(
+            correct_order=" → ".join(correct_order),
+            explanation=explanation
+        ))
+
+def handle_passage_filling5(q, level, category, i):
+    """短文选词填空题处理器"""
+    config = DETAILED_QUESTION_CONFIG[level][category]["短文选词填空题5"]
+    passages = q.get("passages")
+    gaps = q.get("gaps", [])  # 空位信息（包含选项和答案）
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 5))
+
+    st.write("调试：短文选词填空题数据结构 =", q)
+
+    # 1. 先尝试读取passages字段（优先）
+    passages = q.get("passages", [])
+
+    # 处理passages为列表的情况
+    if isinstance(passages, list):
+        passage_text = "\n\n".join(passages).strip()
+    else:
+        passage_text = str(passages).strip()
+
+    # 2. 如果passages内容长度不足20，读取content字段
+    if len(passage_text) < 20:
+        st.write(f"调试：passages长度为{len(passage_text)}，切换至读取content字段")
+        passage_text = q.get("content", "").strip()
+
+    # 3. 验证最终内容是否存在
+    if not passage_text:
+        st.error("错误：短文内容（passages或content）为空")
+        return
+
+    # 显示短文
+    st.markdown("### 阅读短文：")
+    adjusted_passage = adjust_text_by_hsk(passage_text, hsk_num)
+    st.markdown(adjusted_passage)
+
+    # 处理每个空位
+    st.markdown("### 请选择合适的词填入空格：")
+    user_answers = []
+    for gap_idx, gap in enumerate(gaps, 1):
+        gap_text = config["gap_format"].format(gap_number=gap_idx)
+        options = gap.get("options", [])
+        answer = gap.get("answer", "A")
+
+        # 调整选项词汇等级
+        adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]
+
+        # 显示空位和选项
+        st.markdown(f"**第 {gap_idx} 题** {gap_text}")
+        selected = st.radio(
+            "选项：",
+            [f"{chr(65 + k)}. {opt}" for k, opt in enumerate(adjusted_options)],
+            key=f"gap_{i}_{gap_idx}"
+        )
+        user_answers.append(selected.split(". ")[0])
+
+    # 提交答案和验证
+    if st.button(f"提交答案", key=f"submit_{i}"):
+        correct = True
+        for gap_idx, (user_ans, gap) in enumerate(zip(user_answers, gaps), 1):
+            correct_ans = gap.get("answer", "A").upper()
+            if user_ans != correct_ans:
+                correct = False
+                break
+
+        if correct:
+            st.success("所有空位回答正确！")
+        else:
+            st.error("回答错误，请检查空位答案。")
+
+        # 显示解析（示例）
+        for gap_idx, gap in enumerate(gaps, 1):
+            st.markdown(f"**第 {gap_idx} 题解析：**")
+            st.markdown(config["explanation_format"].format(
+                answer=gap.get("answer", "A"),
+                explanation=gap.get("explanation", "根据上下文逻辑选择")
+            ))
+
+def handle_passage_filling6(q, level, category, i):
+    """短文选词填空题处理器"""
+    # 获取配置信息
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
+    min_gaps = config.get("min_gaps", 1)
+    gap_format = config.get("gap_format", "______")
+    show_explanation = config.get("show_explanation", True)
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 6))
+
+    st.write("调试：短文选词填空题数据结构 =", q)
+
+    # ------------------------------
+    # 1. 解析短文内容
+    # ------------------------------
+    passages = q.get("passages", [])
+    if isinstance(passages, list):
+        passage_text = "\n\n".join(passages).strip()  # 合并多段落
+    else:
+        passage_text = str(passages).strip()
+
+    # 兼容content字段（可选）
+    if not passage_text:
+        passage_text = q.get("content", "").strip()
+
+    if not passage_text:
+        st.error("错误：短文内容为空")
+        return
+
+    # ------------------------------
+    # 2. 解析空位和选项
+    # ------------------------------
+    gaps = q.get("gaps", [])
+
+    # 验证空位数量
+    if len(gaps) < min_gaps:
+        st.error(f"错误：至少需要{min_gaps}个空位，当前{len(gaps)}个")
+        return
+
+    # 确保每个空位包含必要字段
+    for gap in gaps:
+        if not gap.get("options") or not gap.get("answer"):
+            st.error("错误：空位信息不完整（需包含options和answer）")
+            return
+
+    # ------------------------------
+    # 3. 显示短文和空位
+    # ------------------------------
+    st.markdown("### 短文阅读：")
+    adjusted_passage = adjust_text_by_hsk(passage_text, hsk_num)  # 假设存在词汇调整函数
+    st.markdown(adjusted_passage)
+
+    st.markdown("### 请选择合适的词填入空格：")
+    user_answers = []
+
+    for gap in gaps:
+        gap_number = gap["gap_number"]
+        options = gap["options"]
+        correct_answer = gap["answer"].upper()
+        explanation = gap.get("explanation", "根据上下文逻辑选择")
+
+        # 格式化选项（确保以A/B/C/D开头）
+        formatted_options = []
+        for idx, opt in enumerate(options):
+            if not opt.startswith(("A.", "B.", "C.", "D.")):
+                formatted_options.append(f"{chr(65 + idx)}. {opt}")
+            else:
+                formatted_options.append(opt)
+
+        # 显示空位和选项
+        st.markdown(f"**第 {gap_number} 题**：{gap_format}")
+        selected = st.radio(
+            "选项：",
+            formatted_options,
+            key=f"gap_{i}_{gap_number}"
+        )
+        user_answers.append({
+            "gap_number": gap_number,
+            "user_answer": selected.split(". ")[0],  # 提取选项字母
+            "correct_answer": correct_answer,
+            "explanation": explanation
+        })
+
+    # ------------------------------
+    # 4. 提交答案和验证
+    # ------------------------------
+    if st.button(f"提交答案", key=f"submit_passage_{i}"):
+        correct_count = 0
+        results = []
+
+        for ans in user_answers:
+            user_ans = ans["user_answer"].upper()
+            # 确保correct_answer存在
+            correct_ans = ans.get("correct_answer", "")  # 使用get方法避免KeyError
+            is_correct = user_ans == correct_ans
+            results.append({
+                "gap_number": ans["gap_number"],
+                "is_correct": is_correct,
+                "correct_answer": correct_ans,  # 明确包含correct_answer
+                "explanation": ans["explanation"]
+            })
+            if is_correct:
+                correct_count += 1
+
+        # 显示结果汇总
+        total = len(user_answers)
+        st.info(f"共回答 {total} 题，正确 {correct_count} 题，正确率 {correct_count / total:.0%}")
+
+        # 显示详细解析
+        if show_explanation:
+            st.markdown("### 答案解析：")
+            for res in results:
+                status = "✅ 正确" if res["is_correct"] else "❌ 错误"
+                st.markdown(f"**第 {res['gap_number']} 题**：{status}")
+                st.markdown(f"**正确答案**：{res['correct_answer']}")
+                st.markdown(f"**解析**：{res['explanation']}")
+                st.markdown("---")
+
+def handle_reading_multiple_choice(q, level, category, i):
+    """阅读文章选择题处理器（完全避免渲染后修改session_state）"""
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("阅读文章选择题", {})
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
+
+    st.write("调试：阅读选择题数据结构 =", q)
+
+    # 1. 获取文章内容
+    passage = ""
+    if "passages" in q:
+        if isinstance(q["passages"], list) and q["passages"]:
+            passage = q["passages"][0]
+        elif isinstance(q["passages"], str):
+            passage = q["passages"]
+
+    if not passage and "content" in q:
+        passage = q["content"]
+
+    # 2. 统一问题格式
+    questions = []
+    if "questions" in q and isinstance(q["questions"], list):
+        questions = q["questions"]
+    else:
+        if "question" in q or "options" in q:
+            questions.append({
+                "text": q.get("question", ""),
+                "options": q.get("options", []),
+                "answer": q.get("answer", ""),
+                "explanation": q.get("explanation", "")
+            })
+
+    # 验证数据
+    if not passage.strip():
+        st.error("错误：文章内容为空")
+        return
+
+    if not questions:
+        st.error("错误：未找到有效问题")
+        st.json(q)
+        return
+
+    # 显示处理后的数据结构
+    st.write("处理后的数据结构:", {
+        "passage": passage[:50] + "..." if len(passage) > 50 else passage,
+        "question_count": len(questions)
+    })
+
+    # 预初始化所有session_state键
+    for j in range(1, len(questions) + 1):
+        answer_key = f"reading_{i}_{j}"
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = None
+
+    # 提交答案回调函数
+    def submit_answers():
+        st.session_state.submitted = True
+
+    # 重置答案回调函数
+    def reset_answers():
+        for j in range(1, len(questions) + 1):
+            answer_key = f"reading_{i}_{j}"
+            st.session_state[answer_key] = None
+        if 'submitted' in st.session_state:
+            del st.session_state.submitted
+
+    # 显示文章
+    st.markdown("### 阅读文章：")
+    adjusted_passage = adjust_text_by_hsk(passage, hsk_num)
+    st.markdown(adjusted_passage)
+
+    # 处理每个问题
+    st.markdown(f"### 请根据文章内容回答问题（共{len(questions)}题）：")
+    for j, question in enumerate(questions, 1):
+        if not isinstance(question, dict):
+            continue
+
+        q_text = question.get("text", f"问题{j}")
+        options = question.get("options", [])
+        answer = str(question.get("answer", "")).upper()
+        explanation = question.get("explanation", "")
+
+        # 调整词汇等级
+        adjusted_q = adjust_text_by_hsk(q_text, hsk_num)
+        adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]
+
+        # 格式化选项标签
+        option_labels = []
+        for k, opt in enumerate(adjusted_options):
+            opt = re.sub(r'^[A-Da-d]\.?\s*', '', opt).strip()
+            option_labels.append(f"{chr(65 + k)}. {opt}")
+
+        # 创建单选框
+        answer_key = f"reading_{i}_{j}"
+        default_index = 0
+
+        if st.session_state[answer_key] is not None:
+            saved_answer = st.session_state[answer_key]
+            default_index = next(
+                (idx for idx, opt in enumerate(option_labels) if opt == saved_answer),
+                0
+            )
+
+        # 只读取session_state，不修改
+        st.radio(
+            f"问题 {j}：{adjusted_q}",
+            option_labels,
+            index=default_index,
+            key=answer_key
+        )
+
+    # 按钮区域
+    col1, col2 = st.columns(2)
+    with col1:
+        st.button("提交答案", on_click=submit_answers)
+    with col2:
+        st.button("重置答案", on_click=reset_answers)
+
+    # 显示结果（仅在提交后）
+    if 'submitted' in st.session_state and st.session_state.submitted:
+        # 计算得分
+        correct_count = 0
+        total_questions = len(questions)
+
+        st.markdown(f"### ✅ **答题结果：**")
+
+        # 显示每个问题的结果
+        for j in range(1, total_questions + 1):
+            answer_key = f"reading_{i}_{j}"
+            if answer_key not in st.session_state or st.session_state[answer_key] is None:
+                st.warning(f"问题 {j}：未作答")
+                continue
+
+            user_choice = st.session_state[answer_key].split('.')[0].strip()
+            correct_answer = questions[j - 1].get("answer", "").upper()
+            explanation = questions[j - 1].get("explanation", "")
+            is_correct = user_choice == correct_answer
+
+            if is_correct:
+                correct_count += 1
+
+            status = "✅ 正确" if is_correct else "❌ 错误"
+
+            st.markdown(f"#### **问题 {j}：** {questions[j - 1].get('text', '')}")
+            st.markdown(f"**你的答案：** {user_choice} → {status}")
+            st.markdown(f"**正确答案：** {correct_answer}")
+
+            if not is_correct and explanation:
+                st.info(f"**解析：** {explanation}")
+            st.markdown("---")
+
+        # 更新得分
+        st.markdown(f"### ✅ **最终得分：**")
+        st.markdown(f"**答对：{correct_count}/{total_questions}题**")
+
+def handle_long_text_comprehension(q, level, category, i):
+    """处理长文本理解题（修复嵌套列表格式的选项）"""
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("长文本理解题", {})
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
+
+    st.write("调试：长文本理解题数据结构 =", q)
+
+    # 获取长文本内容（不变）
+    text = q.get("text", "")
+    if not text.strip():
+        text = q.get("passage", "")
+        text = q.get("content", text)
+
+    if not text.strip():
+        st.error("错误：长文本内容为空")
+        return
+
+    # 获取问题列表（增强兼容旧格式）
+    questions = q.get("questions", [])
+
+    # 兼容旧格式：question字段为列表（包含问题文本和选项）
+    if not questions and "question" in q and isinstance(q["question"], list):
+        st.warning("注意：检测到question字段为列表，已自动转换为字典格式")
+        question_list = q["question"]
+        if len(question_list) > 0:
+            question_text = question_list[0]  # 列表第一个元素为问题文本
+            # 尝试从options字段或question列表后续元素获取选项
+            options = []
+            if "options" in q and isinstance(q["options"], list):
+                # 处理嵌套列表格式的options
+                if q["options"] and isinstance(q["options"][0], list):
+                    options = q["options"][0]  # 提取第一层嵌套列表
+                else:
+                    options = q["options"]
+            elif len(question_list) > 1:
+                options = question_list[1:]  # 使用question列表后续元素作为选项
+
+            questions = [{
+                "text": question_text,
+                "options": options,
+                "answer": q.get("answer", ""),
+                "explanation": q.get("explanation", "")
+            }]
+        else:
+            st.error("错误：question字段为空列表")
+            return
+
+    # 兼容旧格式：question字段为字符串
+    if not questions and "question" in q and isinstance(q["question"], str):
+        st.warning("注意：使用了旧格式的question字段，已转换为questions列表")
+        options = q.get("options", [])
+        # 处理嵌套列表格式的options
+        if options and isinstance(options[0], list):
+            options = options[0]  # 提取第一层嵌套列表
+
+        questions = [{
+            "text": q["question"],
+            "options": options,
+            "answer": q.get("answer", ""),
+            "explanation": q.get("explanation", "")
+        }]
+
+    # 验证问题数量（不变）
+    if not questions:
+        st.error("错误：未找到问题")
+        return
+
+    if len(questions) < config.get("min_questions", 1):
+        st.error(f"错误：至少需要{config.get('min_questions', 1)}个问题")
+        return
+
+    # 显示长文本（不变）
+    st.markdown("### 阅读材料：")
+    adjusted_text = adjust_text_by_hsk(text, hsk_num)
+    paragraphs = adjusted_text.split('\n\n')
+    for para in paragraphs:
+        if para.strip():
+            st.markdown(para)
+            st.markdown("")
+
+    # 显示问题（不变）
+    st.markdown(f"### {config.get('question_format', '根据文章内容，回答问题：')}")
+
+    # 处理每个问题
+    for j, question in enumerate(questions, 1):
+        if not isinstance(question, dict):
+            st.error(f"问题 {j} 格式错误：应为字典，实际为{type(question)}")
+            continue
+
+        # 获取问题文本（不变）
+        question_text = question.get("text", f"问题 {j}")
+        if isinstance(question_text, list):
+            question_text = " ".join(question_text).strip()
+
+        if not question_text.strip():
+            st.error(f"问题 {j} 的文本为空")
+            question_text = f"问题 {j}（文本缺失）"
+
+        # 获取选项（增强处理嵌套列表）
+        options = question.get("options", [])
+
+        # 处理嵌套列表格式的options
+        if options and isinstance(options[0], list):
+            st.warning(f"问题 {j} 的options是嵌套列表，已自动展平")
+            options = options[0]  # 提取第一层嵌套列表
+
+        if not options:
+            st.error(f"问题 {j} 的选项为空")
+            options = ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"]
+
+        # 格式化选项（不变）
+        formatted_options = []
+        for k, opt in enumerate(options):
+            if isinstance(opt, str):
+                if not opt.strip().startswith(("A.", "B.", "C.", "D.")):
+                    prefix = chr(65 + k) + "."
+                    formatted_options.append(f"{prefix} {opt}")
+                else:
+                    formatted_options.append(opt)
+            else:
+                formatted_options.append(f"{chr(65 + k)}. {str(opt)}")
+
+        # 创建单选组件（不变）
+        answer_key = f"long_text_answer_{i}_{j}"
+        selected_option = st.radio(
+            f"问题 {j}: {question_text}",
+            formatted_options,
+            key=answer_key
+        )
+
+    # 提交按钮及结果验证（不变）
+    if st.button(f"提交答案", key=f"submit_long_text_{i}"):
+        correct_count = 0
+        total_count = len(questions)
+
+        for j, question in enumerate(questions, 1):
+            answer_key = f"long_text_answer_{i}_{j}"
+            user_answer = st.session_state.get(answer_key, "").split('.')[0].strip()
+            correct_answer = question.get("answer", "").upper()
+
+            if user_answer == correct_answer:
+                correct_count += 1
+
+        st.info(f"共回答 {total_count} 题，正确 {correct_count} 题，正确率 {correct_count / total_count:.0%}")
+
+        if config.get("show_explanation", True):
+            st.markdown("### 答案解析：")
+            for j, question in enumerate(questions, 1):
+                answer_key = f"long_text_answer_{i}_{j}"
+                user_answer = st.session_state.get(answer_key, "").split('.')[0].strip()
+                correct_answer = question.get("answer", "").upper()
+                explanation = question.get("explanation", "根据文章内容选择最佳答案")
+
+                status = "✅ 正确" if user_answer == correct_answer else "❌ 错误"
+
+                st.markdown(f"**问题 {j}：** {question.get('text', '')}")
+                st.markdown(f"**你的答案：** {user_answer} → {status}")
+                st.markdown(f"**正确答案：** {correct_answer}")
+                st.markdown(f"**解析：** {explanation}")
+                st.markdown("---")
+
+def handle_sentence_filling(q, level, category, i):
+    """短文选句填空题处理器"""
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
+    min_gaps = config.get("min_gaps", 5)
+    gap_format = config.get("gap_format", "__{gap_number}__")
+    show_explanation = config.get("show_explanation", True)
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 6))
+
+    st.write("调试：短文选句填空题数据结构 =", q)
+
+    # 解析短文和空位逻辑（与选词填空类似）
+    passage_text = q.get("passages", [""])[0].strip()
+    gaps = q.get("gaps", [])
+
+    if not passage_text or len(gaps) < min_gaps:
+        st.error("错误：短文内容或空位数不足")
+        return
+
+    # 显示短文
+    st.markdown("### 短文阅读：")
+    adjusted_passage = adjust_text_by_hsk(passage_text, hsk_num)
+    st.markdown(adjusted_passage)
+
+    # 处理每个空位
+    st.markdown("### 请选择合适的句子填入空格：")
+    user_answers = []
+
+    for gap in gaps:
+        gap_number = gap["gap_number"]
+        options = gap["options"]
+        correct_answer = gap["answer"].upper()
+        explanation = gap.get("explanation", "根据上下文逻辑选择")
+
+        # 格式化选项（确保以A/B/C/D/E开头）
+        formatted_options = [f"{opt}" for opt in options]  # 直接使用选项文本（已包含字母前缀）
+
+        # 显示空位和选项
+        st.markdown(f"**第 {gap_number} 题**：{gap_format.format(gap_number=gap_number)}")
+        selected = st.radio(
+            "选项：",
+            formatted_options,
+            key=f"sentence_gap_{i}_{gap_number}"
+        )
+        user_answers.append({
+            "gap_number": gap_number,
+            "user_answer": selected[0],  # 提取选项字母（A/B/C/D/E）
+            "correct_answer": correct_answer,
+            "explanation": explanation
+        })
+
+    # 提交答案和验证逻辑（与选词填空一致）
+    if st.button(f"提交答案", key=f"submit_sentence_{i}"):
+        correct_count = 0
+        results = []
+        for ans in user_answers:
+            user_ans = ans["user_answer"].upper()
+            is_correct = user_ans == ans["correct_answer"]
+            results.append({
+                "gap_number": ans["gap_number"],
+                "is_correct": is_correct,
+                "correct_answer": ans["correct_answer"],
+                "explanation": ans["explanation"]
+            })
+            if is_correct:
+                correct_count += 1
+
+        st.info(f"共回答 {len(results)} 题，正确 {correct_count} 题，正确率 {correct_count / len(results):.0%}")
+
+        if show_explanation:
+            st.markdown("### 答案解析：")
+            for res in results:
+                st.markdown(f"**第 {res['gap_number']} 题**：{'✅ 正确' if res['is_correct'] else '❌ 错误'}")
+                st.markdown(f"**正确答案**：{res['correct_answer']}. {options[ord(res['correct_answer']) - 65]}")  # 显示完整选项
+                st.markdown(f"**解析**：{res['explanation']}")
+                st.markdown("---")
+
+def handle_sentence_error_choice(q, level, category, i):
+    """处理病句选择题"""
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("病句选择题", {})
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
+
+    # 获取题目信息
+    question_text = q.get("question", "请选出有语病的一项")
+    options = q.get("options", [])
+    correct_answer = q.get("answer", "")
+    explanation = q.get("explanation", "")
+    error_type = q.get("error_type", "未知")  # 可选：记录语病类型
+
+    # 验证选项数量
+    if len(options) != config.get("max_sentences", 4):
+        st.warning(f"警告：题目应有4个选项，当前有{len(options)}个，将自动填充空选项")
+        while len(options) < 4:
+            options.append("")
+
+    # 显示题目
+    st.markdown(f"### {question_text}")
+
+    # 显示选项
+    formatted_options = []
+    for idx, sentence in enumerate(options, 1):
+        label = chr(65 + idx - 1)  # A/B/C/D
+        formatted_options.append(f"{label}. {sentence}")
+
+    # 创建单选组件
+    answer_key = f"error_choice_{i}"
+    selected_option = st.radio(
+        "请选择答案：",
+        formatted_options,
+        key=answer_key
+    )
+
+    # 提交按钮
+    if st.button(f"提交第 {i + 1} 题答案", key=f"submit_error_{i}"):
+        user_answer = selected_option.split('.')[0].strip()
+        correct = user_answer == correct_answer
+
+        # 显示结果
+        if correct:
+            st.success("回答正确！")
+        else:
+            st.error(f"回答错误，正确答案为：{correct_answer}")
+
+        # 显示解析
+        if config.get("show_explanation", True) and explanation:
+            st.markdown("### 解析：")
+            st.markdown(f"**语病类型**：{error_type}")
+            st.markdown(f"**错误选项**：{user_answer} —— {selected_option.split('.', 1)[1].strip()}")
+            st.markdown(f"**正确解析**：{explanation}")
+
+def handle_reading_1v2(q, level, category, i):
+    """处理1篇文章+多道题的阅读理解题（增强版）"""
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
+
+    st.write("调试：阅读选择题数据结构 =", q)
+
+    # 解析文章内容
+    passages = q.get("passages", [])
+    if not passages or len(passages) != 1:
+        st.error("错误：需包含且仅包含1篇文章")
+        return
+
+    passage = passages[0].strip()
+    adjusted_passage = adjust_text_by_hsk(passage, hsk_num)
+
+    # 解析问题列表（兼容多种格式）
+    questions_data = []
+
+    # 标准格式：questions字段为字典列表
+    if "questions" in q and isinstance(q["questions"], list):
+        questions_data = q["questions"]
+
+    # 旧格式：question字段为字符串列表，选项全局共享
+    elif "question" in q and isinstance(q["question"], list):
+        question_texts = q["question"]
+        all_options = q.get("options", [])
+        answers = q.get("answer", "").split(",") if isinstance(q.get("answer"), str) else q.get("answer", [])
+
+        # 为每个问题分配独立的选项组
+        options_per_question = 4  # 每个问题4个选项
+        total_questions = len(question_texts)
+
+        # 验证选项总数是否足够
+        if len(all_options) < total_questions * options_per_question:
+            st.warning(f"警告：选项数量不足，应为每个问题提供{options_per_question}个选项")
+
+        for j, text in enumerate(question_texts):
+            # 计算当前问题的选项范围
+            start_idx = j * options_per_question
+            end_idx = start_idx + options_per_question
+
+            # 从全局选项中提取当前问题的选项
+            question_options = all_options[start_idx:end_idx]
+
+            # 如果选项不足，用占位符填充
+            while len(question_options) < options_per_question:
+                question_options.append(f"选项{chr(65 + len(question_options))}（数据缺失）")
+
+            # 获取对应答案（如果存在）
+            answer = answers[j] if j < len(answers) else ""
+
+            questions_data.append({
+                "text": text,
+                "options": question_options,
+                "answer": answer,
+                "explanation": q.get("explanation", "")
+            })
+
+    # 单问题扁平化格式
+    elif "question" in q:
+        questions_data = [{
+            "text": q.get("question", ""),
+            "options": q.get("options", []),
+            "answer": q.get("answer", ""),
+            "explanation": q.get("explanation", "")
+        }]
+
+    if not questions_data:
+        st.error("错误：缺少问题数据")
+        return
+
+    # 调试：显示解析后的问题数量
+    st.write(f"调试：解析出 {len(questions_data)} 个问题")
+
+    # 显示文章
+    st.markdown("### 阅读文章：")
+    st.markdown(adjusted_passage)
+
+    # 处理每个问题
+    user_answers = {}
+    for j, question_data in enumerate(questions_data, 1):
+        question_id = question_data.get("id", j)
+        question_text = question_data.get("text", f"问题{j}")
+        options = question_data.get("options", [])
+        answer = question_data.get("answer", "").upper()
+        explanation = question_data.get("explanation", "")
+
+        if not options:
+            st.warning(f"警告：问题{question_id}缺少选项")
+            continue
+
+        st.markdown(f"### **问题 {question_id}：** {question_text}")
+
+        # 创建单选组件（确保选项格式正确）
+        option_labels = []
+        for k, opt in enumerate(options):
+            # 处理选项格式（如果已经包含A. B.前缀，则不重复添加）
+            if opt.startswith(("A.", "B.", "C.", "D.", "E.", "F.", "G.", "H.")):
+                option_labels.append(opt)
+            else:
+                option_labels.append(f"{chr(65 + k)}. {opt}")
+
+        selected_option = st.radio(
+            "请选择答案：",
+            option_labels,
+            key=f"reading_{i}_{question_id}"
+        )
+
+        # 提取用户选择的字母
+        user_answer = selected_option.split(".")[0].strip() if selected_option else ""
+        user_answers[question_id] = (user_answer, answer, explanation)
+
+    # 提交按钮及结果统计
+    material_id = q.get("id", uuid.uuid4().hex)
+    if st.button("提交阅读答案", key=f"submit_reading_{material_id}_{i}"):
+        correct_count = 0
+        for question_id, (user_answer, correct_answer, explanation) in user_answers.items():
+            with st.expander(f"问题 {question_id} 结果"):
+                st.markdown(f"**你的答案：** {user_answer}")
+                st.markdown(f"**正确答案：** {correct_answer} {'✅' if user_answer == correct_answer else '❌'}")
+                if explanation:
+                    st.markdown(f"**解析：** {explanation}")
+            if user_answer == correct_answer:
+                correct_count += 1
+
+        score = f"{correct_count}/{len(questions_data)}"
+        st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
+
+def handle_article_questions(q, level, category, i):
+    """文章选择题处理器"""
+    config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
+    min_questions = config.get("min_questions", 4)
+    question_format = config.get("question_format", "根据文章内容，回答问题：")
+    show_explanation = config.get("show_explanation", True)
+    hsk_num = q.get("vocab_level", config.get("vocab_level", 6))
+
+    st.write("调试：文章选择题数据结构 =", q)
+
+    # ------------------------------
+    # 1. 解析文章内容
+    # ------------------------------
+    passages = q.get("passages", [])
+    article_text = "\n\n".join(passages).strip()  # 合并多段落
+
+    if not article_text:
+        st.error("错误：文章内容为空")
+        return
+
+    # ------------------------------
+    # 2. 解析问题列表
+    # ------------------------------
+    questions = q.get("questions", [])
+
+    # 验证题目数量
+    if len(questions) < min_questions:
+        st.error(f"错误：至少需要{min_questions}个问题，当前{len(questions)}个")
+        return
+
+    # ------------------------------
+    # 3. 显示文章和问题
+    # ------------------------------
+    st.markdown("### 阅读文章：")
+    adjusted_text = adjust_text_by_hsk(article_text, hsk_num)  # 调整文本难度
+    st.markdown(adjusted_text)
+
+    st.markdown(f"### {question_format}")
+
+    user_answers = []
+    for question in questions:
+        q_id = question["question_id"]
+        q_text = question["text"]
+        options = question["options"]
+        correct_answer = question["answer"].upper()
+        explanation_key = question.get("explanation_key", "")
+
+        # 显示问题和选项
+        st.markdown(f"**问题 {q_id}：** {q_text}")
+        selected = st.radio(
+            "选项：",
+            options,
+            key=f"article_q_{i}_{q_id}"
+        )
+        user_answers.append({
+            "question_id": q_id,
+            "user_answer": selected[0],  # 提取选项字母（A/B/C/D）
+            "correct_answer": correct_answer,
+            "explanation_key": explanation_key
+        })
+
+    # ------------------------------
+    # 4. 提交答案和验证
+    # ------------------------------
+    if st.button(f"提交答案", key=f"submit_article_{i}"):
+        correct_count = 0
+        results = []
+
+        for ans in user_answers:
+            user_ans = ans["user_answer"].upper()
+            is_correct = user_ans == ans["correct_answer"]
+            results.append({
+                "question_id": ans["question_id"],
+                "is_correct": is_correct,
+                "correct_answer": ans["correct_answer"],
+                "explanation_key": ans["explanation_key"]
+            })
+            if is_correct:
+                correct_count += 1
+
+        # 显示结果汇总
+        total = len(user_answers)
+        st.info(f"共回答 {total} 题，正确 {correct_count} 题，正确率 {correct_count / total:.0%}")
+
+        # 显示详细解析
+        if show_explanation:
+            st.markdown("### 答案解析：")
+            for res in results:
+                # 确保 config 包含 explanation_format ✅
+                explanation = config.get("explanation_format", "解析：{answer} 是正确答案。").format(
+                    question_id=res["question_id"],
+                    answer=res["correct_answer"],
+                    explanation_key=res["explanation_key"]
+                )
+                st.markdown(f"**问题 {res['question_id']}**：{'✅ 正确' if res['is_correct'] else '❌ 错误'}")
+                st.markdown(f"**解析**：{explanation}")
+                st.markdown("---")
+
+
+def handle_article_listening(q, level, category, i):
+    """处理听短文选择题（问题带音频）"""
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 6))
+
+    st.write("调试：文章选择题数据结构 =", q)
+
+    # 提取题目信息
+    article_content = q.get("audio_content", [])  # 假设为句子列表
+    questions = q.get("questions", [])
+    audio_question = q.get("audio_question", "请听问题")  # 新增问题音频内容
+
+    # 处理文章内容（假设需要分句处理）
+    adjusted_article = [adjust_text_by_hsk(sentence, hsk_num) for sentence in article_content]
+
+
+    # 生成文章音频（按句子分段生成，合并播放）
+    st.markdown("🎧 **请听文章：**")
+    article_audio_files = []
+    combined_article_audio = f"temp_article_combined_{uuid.uuid4().hex}.mp3"
+
+    try:
+        # 生成每句话的音频并合并
+        for idx, sentence in enumerate(adjusted_article):
+            audio_file = f"temp_article_{idx}_{uuid.uuid4().hex}.mp3"
+            asyncio.run(text_to_speech(sentence, audio_file, level, voice='male'))
+            article_audio_files.append(audio_file)
+
+        # 合并文章音频
+        combine_audio_files(article_audio_files, combined_article_audio)
+        play_audio_in_streamlit(combined_article_audio)
+
+        # 显示文章文本
+        if type_config.get("show_audio_text", False):
+            with st.expander("查看文章原文"):
+                st.markdown("\n".join(adjusted_article))
+
+    except Exception as e:
+        st.error(f"生成文章音频时出错: {str(e)}")
+    finally:
+        st.session_state.temp_files.extend(article_audio_files + [combined_article_audio])
+
+    # 生成问题音频
+    st.markdown("🎧 **请听问题：**")
+    question_audio_files = []
+    for j, question_data in enumerate(questions):
+        question_text = question_data["question"]
+        adjusted_question = adjust_text_by_hsk(question_text, hsk_num)
+        audio_file = f"temp_question_{i}_{j}_{uuid.uuid4().hex}.mp3"
+
+        try:
+            asyncio.run(text_to_speech(adjusted_question, audio_file, level, voice='female'))
+            question_audio_files.append(audio_file)
+        except Exception as e:
+            st.error(f"生成问题{j + 1}音频时出错: {str(e)}")
+
+    # 显示问题和选项
+    st.markdown("### ❓ **问题与选项：**")
+    user_answers = {}
+
+    for j, question_data in enumerate(questions):
+        question_key = f'article_{i}_q{j}'
+        question_text = question_data["question"]
+        options = question_data["options"]
+
+        # 播放问题音频
+        st.markdown(f"#### **问题{j + 1}：**")
+        st.audio(question_audio_files[j], format="audio/mp3", start_time=0)
+
+        # 保存用户答案
+        if question_key not in st.session_state:
+            st.session_state[question_key] = None
+
+        # st.markdown(f"**{question_text}**")
+        selected_option = st.radio(
+            f"请选择问题{j + 1}的答案：",
+            options,
+            index=options.index(st.session_state[question_key]) if st.session_state[question_key] in options else 0,
+            key=f"article_{i}_options_{j}"
+        )
+
+        st.session_state[question_key] = selected_option
+        user_answers[j] = selected_option
+
+    # 提交答案逻辑（保持不变）
+    if st.button("提交答案"):
+        correct_count = 0
+        results = []
+
+        for j, question_data in enumerate(questions):
+            user_choice = user_answers[j].split('.')[0].strip()
+            correct_answer = question_data["answer"]
+            is_correct = user_choice == correct_answer
+            correct_count += 1 if is_correct else 0
+
+            results.append({
+                "question_num": j + 1,
+                "is_correct": is_correct,
+                "user_answer": user_choice,
+                "correct_answer": correct_answer,
+                "explanation": question_data.get("explanation", "")
+            })
+
+        # 显示结果
+        st.markdown(f"### ✅ **答题结果：**")
+        st.markdown(f"**答对：{correct_count}题 / 共{len(questions)}题**")
+        for result in results:
+            status = "✅ 正确" if result["is_correct"] else "❌ 错误"
+            st.markdown(f"**问题{result['question_num']}：** {status}")
+            st.markdown(f"- 你的答案：{result['user_answer']}")
+            st.markdown(f"- 正确答案：{result['correct_answer']}")
+            if result["explanation"]:
+                st.info(f"解析：{result['explanation']}")
+
+
+# 题型处理器映射
+QUESTION_HANDLERS = {
+    "听力看图判断题": handle_look_and_judge1,
+    "阅读看图判断题": handle_look_and_judge2,
+    "看图选择题": handle_look_and_choice,
+    "图片排序题": handle_image_sorting,
+    "听录音选择题": handle_listening,
+    "选词填空题": handle_fill_in_the_blank,
+    "图片匹配题": handle_image_matching,
+    "文字判断题": handle_text_judgment1,
+    "问答匹配题": handle_sentence_matching1,
+    "阅读判断题": handle_text_judgment2,
+    "句子匹配题": handle_sentence_matching2,
+    "阅读理解题": handle_reading_comprehension,
+    "听对话选择题": handle_listening,
+    "听对话选择题4": handle_listening,
+    "听对话选择题5": handle_listening,
+    "听对话选择题6": handle_listening,
+    "连词成句": handle_connect_words_into_sentence,
+    "听对话选择题1v2": handle_audio_dialogue_questions,
+    "听对话选择题1v3": handle_audio_dialogue_questions,
+    "听对话选择题1v5": handle_audio_dialogue_questions,
+    "句子排序题": handle_sentence_sorting,
+    "阅读理解题1v2": handle_reading_1v2,
+    "短文选词填空题5": handle_passage_filling5,
+    "短文选词填空题6": handle_passage_filling6,
+    "阅读文章选择题": handle_reading_multiple_choice,
+    "长文本理解题": handle_long_text_comprehension,
+    "短文选句填空题": handle_sentence_filling,
+    "病句选择题": handle_sentence_error_choice,
+    "文章选择题": handle_article_questions,
+    "听短文选择题": handle_article_listening,
+
+    # 其他题型处理器...
+}
