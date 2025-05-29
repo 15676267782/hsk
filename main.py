@@ -938,6 +938,7 @@ def generate_prompt(level, category, question_types, num_questions=5):
 6. 生成的图片尽量写实，最好是真人的
 7. 图片排序图是五段毫不相关的dialogues
 8. 所有的题目都只能是单选题
+9. 生成的图片与文字描述要一致
 
 【输出格式】
 {{
@@ -955,7 +956,7 @@ def generate_prompt(level, category, question_types, num_questions=5):
       "explanation": "答案解析",  // 可选
       "audio_content": ["语音内容（如果有）","第二句",...],
       "audio_question": "语音问题（如果有）",
-      "image_description": "图片描述（如果有）",
+      "image_description": ["图片1描述（如果有）","图片2描述"，...],
       "sentences": ["句子1", "句子2", ...]  // 新增字段，用于存储填空题的句子
     }}
   ]
@@ -1162,13 +1163,20 @@ def get_examples():
                 "西瓜很好吃，你多吃几块。"
             ],
             "options": [
-                "A. 图片的描述是，一个女人抱着一堆报纸",
-                "B. 图片描述是一些切好的西瓜",
-                "C. 图片描述是一个女孩向男孩请教问题",
-                "D. 图片描述是一个男人举着一台笔记本电脑",
-                "E. 图片描述是一个快递员送货上门"
+                "A. 一个女人抱着一堆报纸",
+                "B. 切好的西瓜",
+                "C. 女孩向男孩请教问题",
+                "D. 男人举着一台笔记本电脑",
+                "E. 快递员送货上门"
             ],
-            "answer": ["A", "E", "D", "C", "B"]
+            "answer": ["A", "E", "D", "C", "B"],
+            "image_description":[
+                "女人抱着报纸",
+                "切好的西瓜",
+                "女孩向男孩请教问题",
+                "男人举着一台笔记本电脑",
+                "快递员送货上门"
+            ]
         },
         {
             "type": "图片排序题",
@@ -1982,7 +1990,7 @@ def handle_image_sorting(q, level, category, i):
     for k, option in enumerate(options):
         img_bytes = generate_image_from_text(option)
         if img_bytes:
-            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}", use_container_width=True)
+            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}")
         else:
             cols[k].markdown(f"{chr(65 + k)}. {option}")
 
@@ -2635,6 +2643,8 @@ def handle_image_matching(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = get_hsk_level(level)
 
+    st.write(q)
+
     sentences = q.get("sentences", [])
     options = q.get("options", [])
     answers = q.get("answers", [])
@@ -2650,7 +2660,7 @@ def handle_image_matching(q, level, category, i):
     for k, option in enumerate(options):
         img_bytes = generate_image_from_text(option)
         if img_bytes:
-            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}", use_container_width=True)
+            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}")
 
     # 让用户为每个句子选择匹配的图片描述
     for j in range(len(sentences)):
