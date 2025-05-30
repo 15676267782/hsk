@@ -6,6 +6,8 @@ from handle import QUESTION_HANDLERS
 
 
 def main():
+    if 'temp_files' not in st.session_state:
+        st.session_state.temp_files = []
     st.set_page_config(layout="wide")
     st.title("📚 HSK智能题库生成系统")
     init_sample_images()
