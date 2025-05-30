@@ -10,6 +10,7 @@ import time
 TEMP_DIR = "temp_audio"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+
 def handle_look_and_judge1(q, level, category, i):
     """处理看图判断题（支持男女声双语音播报）"""
     # 获取该题型的详细配置
@@ -66,11 +67,19 @@ def handle_look_and_judge1(q, level, category, i):
 
         # 处理图片部分
         if type_config.get("require_image", True):
-            image_desc = q.get("image_description", q["content"])
+            # 修正：从数组中获取第一个描述
+            image_desc = q.get("image_description", [q["content"]])[0]
             st.markdown("🖼️ **根据描述生成图像：**")
+
+            # 添加调试信息
+            st.write(f"发送到图像API的描述: {image_desc}")
+
             img_bytes = generate_image_from_text(image_desc)
             if img_bytes:
                 st.image(img_bytes, width=200)
+            else:
+                st.warning("图像生成失败，使用默认占位图")
+                st.image("https://picsum.photos/400/300", width=200)
 
         # 显示选项
         if q.get("options"):
@@ -98,7 +107,7 @@ def handle_look_and_judge1(q, level, category, i):
                 try:
                     os.remove(file)
                 except Exception as e:
-                    st.warning("")
+                    st.warning(f"无法清理临时文件: {str(e)}")
 
 
 def handle_look_and_judge2(q, level, category, i):
@@ -106,36 +115,63 @@ def handle_look_and_judge2(q, level, category, i):
     # 获取该题型的详细配置
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
 
-    st.write(q)
-    # 处理听力部分
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))  # 获取HSK数字等级
 
-    # 处理图片部分
-    if type_config.get("require_image", True):
-        image_desc = q.get("image_description", q["content"])
-        st.markdown("🖼️ **根据描述生成图像：**")
-        img_bytes = generate_image_from_text(image_desc)
-        if img_bytes:
-            st.image(img_bytes, width=200)
+    st.write("调试：阅读看图判断题数据结构 =", q)
 
-        # 显示题目内容
-        st.markdown(f"**题目描述：** {q.get('content', '')}")
+    try:
+        # 处理图片部分
+        if type_config.get("require_image", True):
+            # 修正：从数组中获取第一个描述（如果存在）
+            image_desc = q.get("image_description", [q["content"]])[0]
+            st.markdown("🖼️ **根据描述生成图像：**")
 
-        # 显示问题
+            # # 添加调试信息
+            # st.write(f"发送到图像API的描述: {image_desc}")
+
+            img_bytes = generate_image_from_text(image_desc)
+            if img_bytes:
+                st.image(img_bytes, width=200)  # 优化图片显示
+            else:
+                st.warning("图像生成失败，使用默认占位图")
+                st.image("https://picsum.photos/600/400", width=200)
+
+        # 显示题目内容（根据HSK级别调整）
+        if q.get('content'):
+            adjusted_content = adjust_text_by_hsk(q['content'], hsk_num)
+            st.markdown(f" {adjusted_content}")
+
+        # 显示问题（如果有多个问题，逐个显示）
         if q.get("questions"):
-            st.markdown(f"**问题：** {q['questions']}")
+            questions = q.get("questions", [])
+            if isinstance(questions, str):  # 如果只有一个问题，包装成列表
+                questions = [questions]
 
-    # 显示选项
-    if q.get("options"):
-        if f'answer_{i}' not in st.session_state:
-            st.session_state[f'answer_{i}'] = None
+            for idx, question in enumerate(questions):
+                adjusted_question = adjust_text_by_hsk(question, hsk_num)
+                st.markdown(f"**问题{idx + 1}：** {adjusted_question}")
 
-        selected_option = st.radio("请选择正确的答案：",
-                                   q["options"],
-                                   index=q["options"].index(st.session_state[f'answer_{i}']) if
-                                   st.session_state[f'answer_{i}'] in q["options"] else 0,
-                                   key=f"options_{i}")
+        # 显示选项（根据HSK级别调整）
+        if q.get("options"):
+            # 根据HSK等级调整选项词汇
+            adjusted_options = [adjust_text_by_hsk(option, hsk_num) for option in q["options"]]
 
-        st.session_state[f'answer_{i}'] = selected_option
+            if f'answer_{i}' not in st.session_state:
+                st.session_state[f'answer_{i}'] = None
+
+            # 优化选项显示和选择逻辑
+            selected_option = st.radio(
+                "请选择正确的答案：",
+                adjusted_options,
+                index=adjusted_options.index(st.session_state[f'answer_{i}'])
+                if st.session_state[f'answer_{i}'] in adjusted_options else 0,
+                key=f"options_{i}"
+            )
+
+            st.session_state[f'answer_{i}'] = selected_option
+
+    except Exception as e:
+        st.error(f"处理题目时发生错误: {str(e)}")
 
 
 def handle_look_and_choice(q, level, category, i):
@@ -177,7 +213,7 @@ def handle_look_and_choice(q, level, category, i):
                 img_bytes = generate_image_from_text(img_desc)
                 if img_bytes:
                     cols[j].image(img_bytes, width=150)
-                    cols[j].caption(f"选项{chr(65 + j)}: {img_desc}")
+                    # cols[j].caption(f"选项{chr(65 + j)}: {img_desc}")
 
     # 显示问题
     if q.get("question"):
@@ -229,7 +265,7 @@ def handle_image_sorting(q, level, category, i):
 
     dialogues = q.get("dialogues", [])
     options = q.get("options", [])
-    answers = q.get("answers", [])
+    answers = q.get("answers", [])  # 假设answers是原始选项的正确索引（如["A", "B", "C"]对应原始顺序）
 
     # 尝试从不同字段获取对话
     dialogues = q.get("dialogues", [])
@@ -259,7 +295,18 @@ def handle_image_sorting(q, level, category, i):
         st.json(q)  # 显示原始数据，帮助调试
         return
 
-    st.markdown(f"### {type_config.get('question_format', '请根据听到的五段对话，将图片按对应顺序排列')}")
+        # ----------------------- 新增：随机打乱选项顺序 -----------------------
+        original_options = options.copy()  # 保存原始选项顺序
+        random.shuffle(options)  # 打乱选项顺序
+        option_indices = {char: idx for idx, char in
+                          enumerate([chr(65 + k) for k in range(len(original_options))])}  # 原始选项字母索引
+
+        # 生成随机选项与原始选项的映射（例如：打乱后的选项B对应原始选项A）
+        shuffled_mapping = {new_char: original_char
+                            for new_char, original_char in zip([chr(65 + k) for k in range(len(options))],
+                                                               [chr(65 + k) for k in range(len(original_options))])}
+        # ----------------------- 显示界面调整 -----------------------
+        st.markdown(f"### {type_config.get('question_format', '请根据听到的五段对话，将图片按对应顺序排列')}")
 
     # 播放五段对话录音
     st.markdown("### 听力对话")
@@ -286,25 +333,33 @@ def handle_image_sorting(q, level, category, i):
         else:
             cols[k].markdown(f"{chr(65 + k)}. {option}")
 
-    # 用户选择区域
+    # 用户选择区域（处理随机映射）
     selected_order = []
     for j in range(len(dialogues)):
         answer_key = f'answer_{i}_{j}'
         if answer_key not in st.session_state:
-            st.session_state[answer_key] = ""
+            st.session_state[answer_key] = ""  # 保存原始选项的正确字母（如"A"）
 
-        selected_option = st.selectbox(
+        # 显示打乱后的选项字母供用户选择
+        shuffled_letters = [chr(65 + k) for k in range(len(options))]
+        selected_shuffled_char = st.selectbox(
             f"请为对话 {j + 1} 选择对应的图片选项：",
-            [chr(65 + k) for k in range(len(options))],
+            shuffled_letters,
             index=next(
-                (idx for idx, opt in enumerate([chr(65 + k) for k in range(len(options))])
-                 if opt == st.session_state[answer_key]),
+                (idx for idx, opt in enumerate(shuffled_letters)
+                 if opt == shuffled_mapping.get(st.session_state[answer_key], shuffled_letters[0])),  # 映射原始答案到打乱后的选项
                 0
             ),
             key=f"sorting_{i}_{j}"
         )
-        selected_order.append(selected_option)
-        st.session_state[answer_key] = selected_option
+
+        # 将用户选择的打乱字母转换为原始字母（例如：用户选的是打乱后的"B"，实际对应原始"A"）
+        selected_original_char = next(
+            original_char for original_char, shuffled_char in shuffled_mapping.items()
+            if shuffled_char == selected_shuffled_char
+        )
+        selected_order.append(selected_original_char)
+        st.session_state[answer_key] = selected_original_char  # 保存原始字母答案
 
     # 显示答案与解析
     with st.expander("查看答案与解析", expanded=False):
@@ -655,8 +710,6 @@ def handle_sentence_matching1(q, level, category, i):
         )
         st.markdown(f"**{question_display}**")
 
-        # 调试输出
-        st.write(f"问题 {j + 1}: {question_display}")
 
         # 为每个问题创建独立的选择
         answer_key = f'answer_{i}_{j}'
@@ -668,8 +721,7 @@ def handle_sentence_matching1(q, level, category, i):
             for opt in adjusted_options
         ]
 
-        # 调试输出
-        st.write(f"选项: {option_labels}")
+
 
         selected_option = st.radio(
             f"请选择答案（问题 {j + 1}）:",
@@ -920,7 +972,7 @@ def handle_reading_comprehension(q, level, category, i):
 
 def handle_image_matching(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
-    hsk_num = get_hsk_level(level)
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
     st.write(q)
 
@@ -934,13 +986,24 @@ def handle_image_matching(q, level, category, i):
     for j, sentence in enumerate(sentences):
         st.markdown(f"**句子 {j + 1}：** {sentence}")
 
-    st.markdown("### 选项")
-    cols = st.columns(len(options))
-    for k, option in enumerate(options):
-        img_bytes = generate_image_from_text(option)
-        if img_bytes:
-            cols[k].image(img_bytes, caption=f"选项 {chr(65 + k)}")
+    st.markdown("### 图片")
+    # 控制每行显示的图片数量
+    images_per_row = 5
+    for row_idx in range(0, len(sentences), images_per_row):
+        cols = st.columns(images_per_row)
 
+        for col_idx, sentence_idx in enumerate(range(row_idx, min(row_idx + images_per_row, len(sentences)))):
+            sentence = sentences[sentence_idx]
+            img_bytes = generate_image_from_text(sentence)
+
+            if img_bytes:
+                cols[col_idx].image(img_bytes, caption=f"图片 {sentence_idx + 1}", width=200)
+            else:
+                cols[col_idx].error(f"无法生成句子 {sentence_idx + 1} 的图片")
+                cols[col_idx].image("https://picsum.photos/200/200", caption=f"图片 {sentence_idx + 1} (占位图)", width=200)
+
+    # 只显示选项文本（不生成图片）
+    st.markdown("### 选项")
     # 让用户为每个句子选择匹配的图片描述
     for j in range(len(sentences)):
         answer_key = f'answer_{i}_{j}'
@@ -959,6 +1022,67 @@ def handle_image_matching(q, level, category, i):
         )
 
         st.session_state[answer_key] = selected_option
+
+    with st.expander("查看答案与解析", expanded=False):
+        for j, correct_answer in enumerate(answers):
+            st.success(f"句子 {j + 1} 的正确答案：{correct_answer}")
+            explanation = q.get("explanations", [""])[j]
+            st.info(type_config.get('explanation_format', '').format(explanation=explanation))
+
+
+def handle_image_matching2(q, level, category, i):
+    type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
+    hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write(f"HSK级别: {hsk_num}")  # 调试输出
+
+    sentences = q.get("sentences", [])
+    options = q.get("options", [])
+    answers = q.get("answers", [])
+
+    st.markdown(f"### {type_config.get('question_format', '请将句子与对应的图片描述匹配')}")
+
+    # 显示所有句子（调整HSK级别）
+    for j, sentence in enumerate(sentences):
+        adjusted_sentence = adjust_text_by_hsk(sentence, hsk_num)
+        st.markdown(f"**句子 {j + 1}：** {adjusted_sentence}")
+
+    st.markdown("### 图片")
+    images_per_row = 5
+    for row_idx in range(0, len(sentences), images_per_row):
+        cols = st.columns(images_per_row)
+        for col_idx, sentence_idx in enumerate(range(row_idx, min(row_idx + images_per_row, len(sentences)))):
+            sentence = sentences[sentence_idx]
+            adjusted_sentence = adjust_text_by_hsk(sentence, hsk_num)  # 调整HSK级别
+
+            img_bytes = generate_image_from_text(adjusted_sentence)  # 使用调整后的文本生成图片
+            if img_bytes:
+                cols[col_idx].image(img_bytes, caption=f"图片 {sentence_idx + 1}", width=200)
+            else:
+                cols[col_idx].error(f"无法生成句子 {sentence_idx + 1} 的图片")
+                cols[col_idx].image("https://picsum.photos/200/200", caption=f"图片 {sentence_idx + 1} (占位图)", width=200)
+
+    # 显示选项（调整HSK级别）
+    st.markdown("### 选项")
+    adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]  # 调整所有选项的HSK级别
+
+    for j in range(len(sentences)):
+        answer_key = f'answer_{i}_{j}'
+        if answer_key not in st.session_state:
+            st.session_state[answer_key] = ""
+
+        selected_option = st.radio(
+            f"请为句子 {j + 1} 选择匹配的图片描述：",
+            [f"{chr(65 + k)}. {adjusted_options[k]}" for k in range(len(options))],  # 使用调整后的选项文本
+            index=next(
+                (idx for idx, opt in enumerate([f"{chr(65 + k)}. {adjusted_options[k]}" for k in range(len(options))])
+                 if opt.startswith(f"{st.session_state[answer_key]}.")),
+                0
+            ),
+            key=f"matching_{i}_{j}"
+        )
+
+        st.session_state[answer_key] = selected_option.split('.')[0].strip()
 
     with st.expander("查看答案与解析", expanded=False):
         for j, correct_answer in enumerate(answers):
@@ -994,7 +1118,6 @@ def handle_connect_words_into_sentence(q, level, category, i):
 
     # 获取当前值而不是直接赋值
     user_answer = st.text_input("请输入连成的句子", value=st.session_state[answer_key], key=answer_key)
-
 
 def handle_audio_dialogue_questions(q, level, category, i):
     """处理听对话录音题（删除冒号前的内容，动态生成音频）"""
@@ -2206,6 +2329,7 @@ QUESTION_HANDLERS = {
     "听录音选择题": handle_listening,
     "选词填空题": handle_fill_in_the_blank,
     "图片匹配题": handle_image_matching,
+    "图片匹配题2": handle_image_matching2,
     "文字判断题": handle_text_judgment1,
     "问答匹配题": handle_sentence_matching1,
     "阅读判断题": handle_text_judgment2,

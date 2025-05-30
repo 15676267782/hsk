@@ -10,7 +10,7 @@ QUESTION_TYPES = {
     },
     "HSK2": {
         "听力": ["听力看图判断题", "图片排序题", "听对话选择题"],
-        "阅读": ["图片匹配题", "选词填空题", "阅读判断题", "句子匹配题"]
+        "阅读": ["图片匹配题2", "选词填空题", "阅读判断题", "句子匹配题"]
     },
     "HSK3": {
         "听力": ["图片排序题", "文字判断题", "听对话选择题"],
@@ -127,7 +127,7 @@ DETAILED_QUESTION_CONFIG = {
             "阅读看图判断题": {
                 "require_audio": False,  # 阅读题中的看图判断题不需要音频
                 "require_image": True,
-                "min_words": 5,
+                "min_words": 2,
                 "max_options": 2,
                 "vocab_level": 1,
                 "vocab_weight_mode": True,  # 启用权重模式
@@ -205,10 +205,10 @@ DETAILED_QUESTION_CONFIG = {
             },
         },
         "阅读": {
-            "图片匹配题": {
+            "图片匹配题2": {
                 "require_audio": False,
                 "require_image": True,
-                "min_words": 25,
+                "min_words": 50,
                 "max_options": 5,
                 "vocab_level": 2,
                 "vocab_weight_mode": True,  # 启用权重模式

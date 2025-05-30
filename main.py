@@ -86,7 +86,6 @@ def main():
 
 
 
-
 def display_questions(questions, level, category):
     """展示生成的题目，根据题型分发到不同的处理器"""
     for i, q in enumerate(questions, 1):
