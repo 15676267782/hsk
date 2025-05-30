@@ -390,7 +390,7 @@ DETAILED_QUESTION_CONFIG = {
             "选词填空题": {
                 "require_audio": False,
                 "require_image": False,
-                "min_words": 150,
+                "min_words": 120,
                 "max_options": 5,
                 "vocab_level": 4,
                 "vocab_weight_mode": True,  # 启用权重模式
@@ -403,7 +403,7 @@ DETAILED_QUESTION_CONFIG = {
                 "min_questions": 2,
                 "max_questions": 2,
                 "max_passage_length": 200,
-                "min_words": 180,
+                "min_words": 130,
                 "max_options": 4,
                 "show_pinyin": False,  # 不显示拼音
                 "vocab_level": 4,  # 使用数值引用权重配置
@@ -420,7 +420,7 @@ DETAILED_QUESTION_CONFIG = {
                 "max_sentences": 5,  # 最多句子数（必填）
                 "min_options": 3,
                 "max_options": 5,
-                "min_words": 80,
+                "min_words": 50,
                 "vocab_level": 4,  # 词汇等级
                 "question_content": "将下列句子排列成一段通顺的话",
                 "explanation_format": "正确顺序：{correct_order}。解析：{explanation}",

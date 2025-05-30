@@ -974,7 +974,7 @@ def handle_image_matching(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
-    st.write(q)
+    st.write(f"HSK级别: {hsk_num}")  # 调试输出
 
     sentences = q.get("sentences", [])
     options = q.get("options", [])
@@ -982,29 +982,30 @@ def handle_image_matching(q, level, category, i):
 
     st.markdown(f"### {type_config.get('question_format', '请将句子与对应的图片描述匹配')}")
 
-    # 显示所有句子
+    # 显示所有句子（调整HSK级别）
     for j, sentence in enumerate(sentences):
-        st.markdown(f"**句子 {j + 1}：** {sentence}")
+        adjusted_sentence = adjust_text_by_hsk(sentence, hsk_num)
+        st.markdown(f"**句子 {j + 1}：** {adjusted_sentence}")
 
     st.markdown("### 图片")
-    # 控制每行显示的图片数量
     images_per_row = 5
     for row_idx in range(0, len(sentences), images_per_row):
         cols = st.columns(images_per_row)
-
         for col_idx, sentence_idx in enumerate(range(row_idx, min(row_idx + images_per_row, len(sentences)))):
             sentence = sentences[sentence_idx]
-            img_bytes = generate_image_from_text(sentence)
+            adjusted_sentence = adjust_text_by_hsk(sentence, hsk_num)  # 调整HSK级别
 
+            img_bytes = generate_image_from_text(adjusted_sentence)  # 使用调整后的文本生成图片
             if img_bytes:
                 cols[col_idx].image(img_bytes, caption=f"图片 {sentence_idx + 1}", width=200)
             else:
                 cols[col_idx].error(f"无法生成句子 {sentence_idx + 1} 的图片")
                 cols[col_idx].image("https://picsum.photos/200/200", caption=f"图片 {sentence_idx + 1} (占位图)", width=200)
 
-    # 只显示选项文本（不生成图片）
+    # 显示选项（调整HSK级别）
     st.markdown("### 选项")
-    # 让用户为每个句子选择匹配的图片描述
+    adjusted_options = [adjust_text_by_hsk(opt, hsk_num) for opt in options]  # 调整所有选项的HSK级别
+
     for j in range(len(sentences)):
         answer_key = f'answer_{i}_{j}'
         if answer_key not in st.session_state:
@@ -1012,16 +1013,16 @@ def handle_image_matching(q, level, category, i):
 
         selected_option = st.radio(
             f"请为句子 {j + 1} 选择匹配的图片描述：",
-            [chr(65 + k) for k in range(len(options))],
+            [f"{chr(65 + k)}. {adjusted_options[k]}" for k in range(len(options))],  # 使用调整后的选项文本
             index=next(
-                (idx for idx, opt in enumerate([chr(65 + k) for k in range(len(options))])
-                 if opt == st.session_state[answer_key]),
+                (idx for idx, opt in enumerate([f"{chr(65 + k)}. {adjusted_options[k]}" for k in range(len(options))])
+                 if opt.startswith(f"{st.session_state[answer_key]}.")),
                 0
             ),
             key=f"matching_{i}_{j}"
         )
 
-        st.session_state[answer_key] = selected_option
+        st.session_state[answer_key] = selected_option.split('.')[0].strip()
 
     with st.expander("查看答案与解析", expanded=False):
         for j, correct_answer in enumerate(answers):
@@ -1090,34 +1091,64 @@ def handle_image_matching2(q, level, category, i):
             explanation = q.get("explanations", [""])[j]
             st.info(type_config.get('explanation_format', '').format(explanation=explanation))
 
+
 def handle_connect_words_into_sentence(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
-    hsk_num = get_hsk_level(level)
+    hsk_num = get_hsk_level(level)  # 获取HSK级别
 
     words = q.get("words", [])  # 待连成句子的词语列表
-    correct_answer = q.get("answer", "")  # 正确答案
+    correct_answer = q.get("answer", "")  # 正确答案（完整句子）
     explanation = q.get("explanation", "")  # 答案解析
 
     st.markdown(f"### {type_config.get('question_format', '请将下列词语连成一个完整的句子：')}")
 
-    # 显示词语，根据配置决定是否显示拼音
+    # 随机打乱词语顺序（新增功能）
+    shuffled_words = words.copy()
+    random.shuffle(shuffled_words)
+
+    # 显示词语，根据配置决定是否显示拼音，并使用HSK级别调整难度
     word_display = []
-    for word in words:
+    for word in shuffled_words:
+        adjusted_word = adjust_text_by_hsk(word, hsk_num)  # 调整词语难度
         if type_config.get("show_pinyin", False):
-            word_display.append(add_pinyin(word))
+            word_display.append(add_pinyin(adjusted_word))
         else:
-            word_display.append(word)
-    st.markdown(", ".join(word_display))
+            word_display.append(adjusted_word)
+
+    st.markdown(", ".join(word_display), unsafe_allow_html=True)  # 用逗号连接词语
 
     # 让用户输入连成的句子
     answer_key = f'answer_{i}'
 
-    # 初始化session_state值，如果不存在的话
+    # 初始化session_state值
     if answer_key not in st.session_state:
         st.session_state[answer_key] = ""
 
-    # 获取当前值而不是直接赋值
-    user_answer = st.text_input("请输入连成的句子", value=st.session_state[answer_key], key=answer_key)
+    # 获取用户输入
+    user_answer = st.text_input(
+        "请输入连成的句子",
+        value=st.session_state[answer_key],
+        key=answer_key
+    )
+
+    # 答案验证（新增逻辑）
+    if st.button("提交答案"):
+        # 使用HSK级别调整正确答案（确保难度匹配）
+        adjusted_correct_answer = adjust_text_by_hsk(correct_answer, hsk_num)
+
+        # 简单验证（去除空格和标点后比较）
+        user_cleaned = user_answer.replace(" ", "").replace("，", ",").replace("。", "")
+        correct_cleaned = adjusted_correct_answer.replace(" ", "").replace("，", ",").replace("。", "")
+
+        if user_cleaned == correct_cleaned:
+            st.success("✅ 回答正确！")
+        else:
+            st.error(f"❌ 回答错误，正确答案是：{adjusted_correct_answer}")
+
+        # 显示答案解析（如果有）
+        if explanation:
+            adjusted_explanation = adjust_text_by_hsk(explanation, hsk_num)
+            st.markdown(f"**解析：** {adjusted_explanation}", unsafe_allow_html=True)
 
 def handle_audio_dialogue_questions(q, level, category, i):
     """处理听对话录音题（删除冒号前的内容，动态生成音频）"""
