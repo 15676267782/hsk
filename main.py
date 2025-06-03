@@ -2,8 +2,8 @@ import streamlit as st
 from util import init_sample_images,show_question_type_example,generate_prompt,get_completion,clean_json_response
 from config import QUESTION_TYPES
 from handle import QUESTION_HANDLERS
-
-
+# 清理缓存
+st.cache_data.clear()
 
 def main():
     if 'temp_files' not in st.session_state:

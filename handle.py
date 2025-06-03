@@ -745,7 +745,7 @@ def handle_text_judgment2(q, level, category, i):
 
     # 提取题目信息
     content = q.get("content", "")  # 阅读文本
-    question = q.get("question", "")  # 需要判断的问题
+    question = q.get("questions", "")  # 需要判断的问题
     answer = q.get("answer", "")  # 正确答案
     explanation = q.get("explanation", "")  # 答案解析
 
