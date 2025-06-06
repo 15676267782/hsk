@@ -1,12 +1,8 @@
---no-cache-dir
---force-reinstall
-https://files.pythonhosted.org/packages/8f/6f/85f03f4456c2934d34c3e46e3410202c0e4b195f95c6c03a94f9d/Pillow-10.0.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whldashscope==1.23.3
+dashscope==1.23.3
 edge_tts==7.0.2
 jieba==0.42.1
-pydub==0.25.1
+Pillow==11.2.1
 pypinyin==0.54.0
 python-dotenv==1.1.0
 Requests==2.32.3
 streamlit==1.37.1
-setuptools>=65.5.0
-wheel>=0.40.0
