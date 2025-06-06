@@ -295,18 +295,18 @@ def handle_image_sorting(q, level, category, i):
         st.json(q)  # 显示原始数据，帮助调试
         return
 
-        # ----------------------- 新增：随机打乱选项顺序 -----------------------
-        original_options = options.copy()  # 保存原始选项顺序
-        random.shuffle(options)  # 打乱选项顺序
-        option_indices = {char: idx for idx, char in
-                          enumerate([chr(65 + k) for k in range(len(original_options))])}  # 原始选项字母索引
+    # ----------------------- 新增：随机打乱选项顺序 -----------------------
+    original_options = options.copy()  # 保存原始选项顺序
+    random.shuffle(options)  # 打乱选项顺序
+    option_indices = {char: idx for idx, char in
+                      enumerate([chr(65 + k) for k in range(len(original_options))])}  # 原始选项字母索引
 
-        # 生成随机选项与原始选项的映射（例如：打乱后的选项B对应原始选项A）
-        shuffled_mapping = {new_char: original_char
-                            for new_char, original_char in zip([chr(65 + k) for k in range(len(options))],
-                                                               [chr(65 + k) for k in range(len(original_options))])}
-        # ----------------------- 显示界面调整 -----------------------
-        st.markdown(f"### {type_config.get('question_format', '请根据听到的五段对话，将图片按对应顺序排列')}")
+    # 生成随机选项与原始选项的映射（例如：打乱后的选项B对应原始选项A）
+    shuffled_mapping = {new_char: original_char
+                        for new_char, original_char in zip([chr(65 + k) for k in range(len(options))],
+                                                           [chr(65 + k) for k in range(len(original_options))])}
+    # ----------------------- 显示界面调整 -----------------------
+    st.markdown(f"### {type_config.get('question_format', '请根据听到的五段对话，将图片按对应顺序排列')}")
 
     # 播放五段对话录音
     st.markdown("### 听力对话")
