@@ -7,3 +7,5 @@ pypinyin==0.54.0
 python-dotenv==1.1.0
 Requests==2.32.3
 streamlit==1.37.1
+setuptools>=65.5.0
+wheel>=0.40.0
