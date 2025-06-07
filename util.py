@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import atexit
+import time
+
 from dotenv import load_dotenv, find_dotenv
 import re
 from dashscope import Generation
@@ -643,7 +645,7 @@ def get_examples():
         },
         {
             "type": "听对话选择题1v3",
-            "audio_content": "听力材料文本...",
+            "audio_content": "秋天到了，寺院里到处都是落叶，师傅让小和尚负责清扫。他每天要花很长时间才能打扫完，这让他头疼不已。他想找个好办法让自己打扫时能轻松一些。有人对他说“你打扫前用力摇摇树，让叶子统统落下，这样明天不就省事儿了？”小和尚觉得这个方法不错，就高兴地照办了，可是第二天，院子里仍然是满地的落叶。无论你今天怎么用力打扫，明天的落叶还是会飘下来。世上有很多事是无法提前的，该发生的你怎么阻挡不了，不会发生的你再努力也没有用，所以重要的是，活在当下。",
             "questions": [
                 {
                     "id": 1,
@@ -1043,3 +1045,87 @@ def show_question_type_example(level, category, type_name):
                 st.warning(f"图片不存在: {img_path}")
         except Exception as e:
             st.error(f"加载示例失败: {str(e)}")
+
+
+def generate_questions(level, category, question_type, num_questions=1):
+    """生成指定类型和数量的题目"""
+    try:
+        # 获取该题型的详细配置
+        type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(question_type, {})
+        if not type_config:
+            st.error(f"未找到题型配置: {level} - {category} - {question_type}")
+            return None
+
+        # 获取示例题目
+        examples = get_examples()
+
+        # 根据题型筛选示例
+        filtered_examples = [q for q in examples if q.get('type') == question_type]
+
+        if not filtered_examples:
+            st.error(f"未找到{question_type}的示例题目")
+            return None
+
+        # 随机选择指定数量的题目
+        import random
+        selected_questions = random.sample(filtered_examples, min(num_questions, len(filtered_examples)))
+
+        return selected_questions
+    except Exception as e:
+        st.error(f"生成题目失败: {str(e)}")
+        return None
+
+
+def save_questions(questions, filename=None):
+    """保存题目数据到JSON文件"""
+    try:
+        if filename is None:
+            # 使用时间戳创建文件名
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"questions_{timestamp}.json"
+
+        # 确保保存目录存在
+        save_dir = "saved_questions"
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 完整的文件路径
+        filepath = os.path.join(save_dir, filename)
+
+        # 保存数据
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(questions, f, ensure_ascii=False, indent=2)
+
+        return filepath
+    except Exception as e:
+        st.error(f"保存题目失败: {str(e)}")
+        return None
+
+
+def load_questions(filename):
+    """从JSON文件加载题目数据"""
+    try:
+        filepath = os.path.join("saved_questions", filename)
+        if not os.path.exists(filepath):
+            st.error(f"文件不存在: {filepath}")
+            return None
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            questions = json.load(f)
+        return questions
+    except Exception as e:
+        st.error(f"加载题目失败: {str(e)}")
+        return None
+
+
+def list_saved_questions():
+    """列出所有保存的题目文件"""
+    try:
+        save_dir = "saved_questions"
+        if not os.path.exists(save_dir):
+            return []
+
+        files = [f for f in os.listdir(save_dir) if f.endswith('.json')]
+        return sorted(files, reverse=True)  # 按时间倒序排列
+    except Exception as e:
+        st.error(f"获取保存的题目列表失败: {str(e)}")
+        return []

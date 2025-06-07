@@ -1265,10 +1265,13 @@ def handle_connect_words_into_sentence(q, level, category, i):
             adjusted_explanation = adjust_text_by_hsk(explanation, hsk_num)
             st.markdown(f"**解析：** {adjusted_explanation}", unsafe_allow_html=True)
 
+
 def handle_audio_dialogue_questions(q, level, category, i):
     """处理听对话录音题（删除冒号前的内容，动态生成音频）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
+
+    st.write(q)
 
     # 提取听力材料和问题列表
     audio_content = q.get("audio_content", [])
@@ -1336,8 +1339,6 @@ def handle_audio_dialogue_questions(q, level, category, i):
                 'index': idx + 1
             })
 
-            # st.write(f"{icon} 正在生成第{idx + 1}句：{original[:30]}...")
-
         # 合并所有对话音频
         if not audio_files:
             st.error("没有生成任何音频文件")
@@ -1385,23 +1386,20 @@ def handle_audio_dialogue_questions(q, level, category, i):
 
             # 问题容器
             with st.container():
-                col1, col2 = st.columns([9, 1])
+                st.markdown(f"### **问题 {question_id}：**")
 
-                with col1:
-                    st.markdown(f"### **问题 {question_id}：")
-
-                with col2:
-                    if question_audio_enabled:
-                        try:
-                            # 优先使用预先生成的音频路径
-                            audio_path = question_data.get("audio_path")
-                            if audio_path and os.path.exists(audio_path):
-                                st.audio(audio_path, format="audio/mp3", start_time=0)
-                            else:
-                                asyncio.run(text_to_speech(question_text, question_audio_file, level))
-                                st.audio(question_audio_file, format="audio/mp3", start_time=0)
-                        except Exception as e:
-                            st.error(f"生成或播放问题 {question_id} 音频时出错: {str(e)}")
+                # 直接显示问题音频
+                if question_audio_enabled:
+                    try:
+                        # 优先使用预先生成的音频路径
+                        audio_path = question_data.get("audio_path")
+                        if audio_path and os.path.exists(audio_path):
+                            st.audio(audio_path, format="audio/mp3", start_time=0)
+                        else:
+                            asyncio.run(text_to_speech(question_text, question_audio_file, level))
+                            st.audio(question_audio_file, format="audio/mp3", start_time=0)
+                    except Exception as e:
+                        st.error(f"生成或播放问题 {question_id} 音频时出错: {str(e)}")
 
                 # 生成选项标签
                 option_labels = [f"{opt}" for opt in options]
