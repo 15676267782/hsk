@@ -142,6 +142,7 @@ DETAILED_QUESTION_CONFIG = {
                 "max_options": 5,
                 "vocab_level": 1,
                 "vocab_weight_mode": True,  # 启用权重模式
+
             },
             "问答匹配题": {
                 "require_audio": False,
