@@ -140,14 +140,26 @@ def play_audio_in_streamlit(audio_path):
 # 添加音频合并函数
 def combine_audio_files(audio_files, output_file):
     """合并多个音频文件为一个"""
-    from pydub import AudioSegment
+    try:
+        import subprocess
 
-    combined = AudioSegment.empty()
-    for file in audio_files:
-        audio = AudioSegment.from_mp3(file)
-        combined += audio
+        # 创建一个临时文件列表
+        with open('file_list.txt', 'w') as f:
+            for file in audio_files:
+                f.write(f"file '{file}'\n")
 
-    combined.export(output_file, format="mp3")
+        # 使用ffmpeg合并音频
+        subprocess.run([
+            'ffmpeg', '-f', 'concat', '-safe', '0',
+            '-i', 'file_list.txt', '-c', 'copy', output_file
+        ], check=True)
+
+        # 清理临时文件
+        os.remove('file_list.txt')
+        return True
+    except Exception as e:
+        st.error(f"合并音频文件失败: {str(e)}")
+        return False
 
 
 @contextmanager
