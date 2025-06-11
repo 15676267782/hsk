@@ -375,6 +375,13 @@ def handle_listening(q, level, category, i):
 
     st.write("调试：听力选择题数据结构 =", q)
 
+    # 使用UUID生成绝对唯一的键值后缀
+    unique_suffix = str(uuid.uuid4())[:8]  # 取UUID的前8位作为后缀
+
+    # 生成更唯一的键值前缀，包含级别、分类、题型、题号和内容哈希
+    content_hash = str(hash(str(q.get("audio_content", ""))))[:8]  # 取哈希值的前8位
+    unique_key_prefix = f"{level}_{category}_{q.get('type', '')}_{i}_{content_hash}_{unique_suffix}"
+
     # 提取题目信息
     audio_content = q.get("audio_content", [])  # 确保是列表
     question = q.get("audio_question", "")
@@ -447,12 +454,6 @@ def handle_listening(q, level, category, i):
         st.markdown("**问题：**")
         play_audio_in_streamlit(question_audio)
 
-        # 记录所有临时文件以便清理
-        if 'temp_files' not in st.session_state:
-            st.session_state.temp_files = []
-        st.session_state.temp_files.extend([combined_audio, question_audio] +
-                                           [item['file'] for item in audio_files])
-
     except Exception as e:
         st.error(f"生成或播放录音时出错: {str(e)}")
     finally:
@@ -461,27 +462,22 @@ def handle_listening(q, level, category, i):
             st.session_state.temp_files = []
         st.session_state.temp_files.extend([item['file'] for item in audio_files])
 
-        # 添加清理按钮
-    if st.button("清理临时文件", key=f"clean_{i}"):
-        cleanup_temp_files()
-        st.success("临时文件已清理！")
-
     # 显示问题和选项
-    if f'answer_{i}' not in st.session_state:
-        st.session_state[f'answer_{i}'] = None
+    if f'answer_{unique_key_prefix}' not in st.session_state:
+        st.session_state[f'answer_{unique_key_prefix}'] = None
 
     selected_option = st.radio(
         "请选择正确的答案：",
         adjusted_options,  # 直接使用原始选项列表，无需添加字母前缀
-        index=adjusted_options.index(st.session_state[f'answer_{i}'])
-        if st.session_state[f'answer_{i}'] in adjusted_options else 0,
-        key=f"listening_options_{i}"
+        index=adjusted_options.index(st.session_state[f'answer_{unique_key_prefix}'])
+        if st.session_state[f'answer_{unique_key_prefix}'] in adjusted_options else 0,
+        key=f"listening_options_{unique_key_prefix}"
     )
 
-    st.session_state[f'answer_{i}'] = selected_option
+    st.session_state[f'answer_{unique_key_prefix}'] = selected_option
 
-    # 提交答案按钮
-    if st.button("提交答案", key=f"submit_{i}"):
+    # 提交答案按钮 - 使用更唯一的键值
+    if st.button("提交答案", key=f"submit_{unique_key_prefix}"):
         correct_answer = q.get("answer", "A")
         user_choice = selected_option.split('.')[0].strip()
 
@@ -559,43 +555,58 @@ def handle_fill_in_the_blank(q, level, category, i):
     # ------------------------------
     # 4. 答案选择（改为下拉选择形式）
     # ------------------------------
+    # ------------------------------
+    # 4. 答案选择（仅显示字母ABCD，存储字母答案）
+    # ------------------------------
     user_answers = {}
+    option_letters = [chr(65 + j) for j in range(len(adjusted_options))]  # 生成字母列表[A, B, C, D, E]
+
     for idx in range(len(sentences)):
-        # 每个题目使用独立的key
         key = f"fill_answer_{i}_{idx}"
 
-        # 使用下拉选择框替代文本输入
-        user_answer = st.selectbox(
+        # 使用下拉框显示字母选项，并关联原始选项文本
+        user_letter = st.selectbox(
             f"请为第{idx + 1}题选择答案",
-            adjusted_options,  # 直接使用选项列表
+            option_letters,  # 显示字母A-E
             key=key
         )
 
-        # 存储用户选择的选项文本
-        user_answers[idx + 1] = user_answer
+        # 存储用户选择的字母（如"A", "B"）
+        user_answers[idx + 1] = user_letter
 
     # ------------------------------
-    # 5. 提交与结果验证
+    # 5. 提交与结果验证（根据字母索引匹配选项）
     # ------------------------------
     if st.button(f"提交答案", key=f"submit_fill_{i}"):
         correct_count = 0
-        for idx, (sentence, correct_option) in enumerate(zip(sentences, q.get("answers", []))):
-            question_id = idx + 1
-            user_answer = user_answers.get(question_id, "")
-            correct_answer = correct_option.upper()
+        correct_letters = q.get("answers", [])  # 假设正确答案为字母列表（如 ["A", "B", "C"]）
 
-            with st.expander(f"第{question_id}题 结果"):
-                st.markdown(f"**题目：** {sentence}")
-                st.markdown(f"**你的答案：** {user_answer}")
-                st.markdown(f"**正确答案：** {correct_answer} {'✅' if user_answer == correct_answer else '❌'}")
+        for question_id, user_letter in user_answers.items():
+            idx = question_id - 1
+            if idx < len(correct_letters):
+                correct_letter = correct_letters[idx].upper()
 
-                # 显示选项对应的词语（可选）
-                if user_answer:
-                    selected_word = adjusted_options[ord(user_answer) - 65]  # A->0, B->1...
-                    st.markdown(f"**选项含义：** {selected_word}")
+                # 根据字母索引获取选项文本（用于显示）
+                user_option_idx = ord(user_letter) - 65  # A->0, B->1...
+                user_option_text = adjusted_options[user_option_idx] if user_option_idx < len(adjusted_options) else ""
 
-        score = f"{correct_count}/{len(sentences)}"
-        st.success(f"得分：{score} ({correct_count / len(sentences):.0%})")
+                # 根据正确答案字母获取正确选项文本（用于显示）
+                correct_option_idx = ord(correct_letter) - 65
+                correct_option_text = adjusted_options[correct_option_idx] if correct_option_idx < len(
+                    adjusted_options) else ""
+
+                with st.expander(f"第{question_id}题 结果"):
+                    st.markdown(f"**题目：** {sentences[idx]}")
+                    st.markdown(f"**你的答案：** {user_letter} ({user_option_text})")
+                    st.markdown(
+                        f"**正确答案：** {correct_letter} ({correct_option_text}) {'✅' if user_letter == correct_letter else '❌'}")
+
+                    if user_letter != correct_letter:
+                        st.info(f"解析：此处应选 {correct_letter}，因为...")  # 可添加自定义解析
+
+        total = len(sentences)
+        score = f"{correct_count}/{total}"
+        st.success(f"得分：{score} ({correct_count / total:.0%})")
 
 def handle_text_judgment1(q, level, category, i):
     """处理文字判断题"""
@@ -613,25 +624,34 @@ def handle_text_judgment1(q, level, category, i):
     adjusted_audio_content = adjust_text_by_hsk(audio_content, hsk_num)
     adjusted_target_sentence = adjust_text_by_hsk(target_sentence, hsk_num)
 
-    # 播放录音
-    st.markdown("🎧 **点击播放录音：**")
-    temp_audio = f"temp_{uuid.uuid4().hex}.mp3"
-
+    # 播放原始录音
+    st.markdown("🎧 **点击播放描述录音：**")
+    temp_audio = f"temp_description_{uuid.uuid4().hex}.mp3"
     try:
         asyncio.run(text_to_speech(adjusted_audio_content, temp_audio, level))
         play_audio_in_streamlit(temp_audio)
     except Exception as e:
-        st.error(f"生成或播放录音时出错: {str(e)}")
+        st.error(f"生成描述录音时出错: {str(e)}")
     finally:
         if os.path.exists(temp_audio):
             os.remove(temp_audio)
 
-    # 显示带标记的完整句子
-
-    # 显示问题和需要判断的句子
+    # 显示问题文本
     st.markdown("### 问题：")
     st.markdown(f"请判断 **※{adjusted_target_sentence}※** 是否正确")
-
+    # # 生成并播放目标句子音频
+    # st.markdown("🎧 **点击播放目标句子录音：**")
+    temp_target_audio = f"temp_target_{uuid.uuid4().hex}.mp3"
+    try:
+        # 调整目标句子词汇并生成音频
+        adjusted_target_for_audio = adjust_text_by_hsk(target_sentence, hsk_num)
+        asyncio.run(text_to_speech(adjusted_target_for_audio, temp_target_audio, level))
+        play_audio_in_streamlit(temp_target_audio)
+    except Exception as e:
+        st.error(f"生成目标句子录音时出错: {str(e)}")
+    finally:
+        if os.path.exists(temp_target_audio):
+            os.remove(temp_target_audio)
     # 显示选项
     if f'answer_{i}' not in st.session_state:
         st.session_state[f'answer_{i}'] = None
@@ -639,8 +659,7 @@ def handle_text_judgment1(q, level, category, i):
     selected_option = st.radio(
         "请选择：",
         options,
-        index=options.index(st.session_state[f'answer_{i}']) if
-        st.session_state[f'answer_{i}'] in options else 0,
+        index=options.index(st.session_state[f'answer_{i}']) if st.session_state[f'answer_{i}'] in options else 0,
         key=f"judgment_options_{i}"
     )
 
@@ -779,8 +798,7 @@ def handle_text_judgment2(q, level, category, i):
 
     # 显示问题
     st.markdown("### 问题：")
-    st.markdown(f"{type_config.get('question_format', '判断下列陈述是否正确：')}")
-    st.markdown(f"**{question_with_pinyin}**")
+    st.markdown(f"*{question_with_pinyin}*")
 
     # 显示选项
     options = type_config.get("options", ["对", "错"])
@@ -806,7 +824,6 @@ def handle_sentence_matching2(q, level, category, i):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
     min_words = type_config.get("min_words")  # 获取最小字数
-
     st.write(q)
 
     # 提取题目信息
@@ -1768,6 +1785,7 @@ def handle_reading_multiple_choice(q, level, category, i):
             opt = re.sub(r'^[A-Da-d]\.?\s*', '', opt).strip()
             option_labels.append(f"{chr(65 + k)}. {opt}")
 
+
         # 创建单选框
         answer_key = f"reading_{i}_{j}"
         default_index = 0
@@ -1781,7 +1799,7 @@ def handle_reading_multiple_choice(q, level, category, i):
 
         # 只读取session_state，不修改
         st.radio(
-            f"问题 {j}：{adjusted_q}",
+            f"**问题 {j}：{adjusted_q}**",
             option_labels,
             index=default_index,
             key=answer_key
@@ -2244,6 +2262,7 @@ def handle_reading_1v2(q, level, category, i):
         score = f"{correct_count}/{len(questions_data)}"
         st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
 
+
 def handle_article_questions(q, level, category, i):
     """文章选择题处理器"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
@@ -2289,7 +2308,7 @@ def handle_article_questions(q, level, category, i):
         q_text = question["text"]
         options = question["options"]
         correct_answer = question["answer"].upper()
-        explanation_key = question.get("explanation_key", "")
+        explanation = question.get("explanation", "")  # 提前获取解析文本
 
         # 显示问题和选项
         st.markdown(f"**问题 {q_id}：** {q_text}")
@@ -2298,11 +2317,15 @@ def handle_article_questions(q, level, category, i):
             options,
             key=f"article_q_{i}_{q_id}"
         )
+
+        # 提取用户选择的字母（改进版）
+        user_letter = selected.split('.')[0].strip().upper()  # 从选项文本中提取字母（如"A"）
+
         user_answers.append({
             "question_id": q_id,
-            "user_answer": selected[0],  # 提取选项字母（A/B/C/D）
+            "user_answer": user_letter,  # 使用提取的字母
             "correct_answer": correct_answer,
-            "explanation_key": explanation_key
+            "explanation": explanation  # 存储解析文本
         })
 
     # ------------------------------
@@ -2310,17 +2333,19 @@ def handle_article_questions(q, level, category, i):
     # ------------------------------
     if st.button(f"提交答案", key=f"submit_article_{i}"):
         correct_count = 0
-        results = []
+        results = []  # 初始化results列表
 
         for ans in user_answers:
-            user_ans = ans["user_answer"].upper()
+            user_ans = ans["user_answer"]
             is_correct = user_ans == ans["correct_answer"]
+
             results.append({
                 "question_id": ans["question_id"],
                 "is_correct": is_correct,
                 "correct_answer": ans["correct_answer"],
-                "explanation_key": ans["explanation_key"]
+                "explanation": ans["explanation"]  # 从user_answers获取解析
             })
+
             if is_correct:
                 correct_count += 1
 
@@ -2332,16 +2357,9 @@ def handle_article_questions(q, level, category, i):
         if show_explanation:
             st.markdown("### 答案解析：")
             for res in results:
-                # 确保 config 包含 explanation_format ✅
-                explanation = config.get("explanation_format", "解析：{answer} 是正确答案。").format(
-                    question_id=res["question_id"],
-                    answer=res["correct_answer"],
-                    explanation_key=res["explanation_key"]
-                )
                 st.markdown(f"**问题 {res['question_id']}**：{'✅ 正确' if res['is_correct'] else '❌ 错误'}")
-                st.markdown(f"**解析**：{explanation}")
+                st.markdown(f"**解析**：{res['explanation']}")
                 st.markdown("---")
-
 
 def handle_article_listening(q, level, category, i):
     """处理听短文选择题（问题带音频）"""
