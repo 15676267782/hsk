@@ -11,7 +11,7 @@ TEMP_DIR = "temp_audio"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 
-def handle_look_and_judge1(q, level, category, i):
+def handle_look_and_judge1(q, level, category, i,paper_display_id):
     """处理看图判断题（支持男女声双语音播报）"""
     # 获取该题型的详细配置
     global adjusted_audio_text
@@ -110,7 +110,7 @@ def handle_look_and_judge1(q, level, category, i):
                     st.warning(f"无法清理临时文件: {str(e)}")
 
 
-def handle_look_and_judge2(q, level, category, i):
+def handle_look_and_judge2(q, level, category, i,paper_display_id):
     """处理阅读看图判断题"""
     # 获取该题型的详细配置
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
@@ -174,7 +174,7 @@ def handle_look_and_judge2(q, level, category, i):
         st.error(f"处理题目时发生错误: {str(e)}")
 
 
-def handle_look_and_choice(q, level, category, i):
+def handle_look_and_choice(q, level, category, i,paper_display_id):
     """处理看图选择题（修复图片生成问题）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -259,7 +259,7 @@ def handle_look_and_choice(q, level, category, i):
                 st.info(f"解析：{q.get('explanation')}")
 
 
-def handle_image_sorting(q, level, category, i):
+def handle_image_sorting(q, level, category, i,paper_display_id):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
@@ -368,7 +368,7 @@ def handle_image_sorting(q, level, category, i):
         st.info(type_config.get('explanation_format', '').format(explanation=explanation))
 
 
-def handle_listening(q, level, category, i):
+def handle_listening(q, level, category, i,paper_display_id):
     """处理听力选择题（动态读取audio_content并自动分配男女声，删除冒号前的内容）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -490,7 +490,7 @@ def handle_listening(q, level, category, i):
         if q.get("explanation"):
             st.info(f"解析：{q.get('explanation')}")
 
-def handle_fill_in_the_blank(q, level, category, i):
+def handle_fill_in_the_blank(q, level, category, i,paper_display_id):
     """处理选词填空题（支持拼音显示和多题一次性展示）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -608,7 +608,7 @@ def handle_fill_in_the_blank(q, level, category, i):
         score = f"{correct_count}/{total}"
         st.success(f"得分：{score} ({correct_count / total:.0%})")
 
-def handle_text_judgment1(q, level, category, i):
+def handle_text_judgment1(q, level, category, i,paper_display_id):
     """处理文字判断题"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -665,7 +665,7 @@ def handle_text_judgment1(q, level, category, i):
 
     st.session_state[f'answer_{i}'] = selected_option
 
-def handle_sentence_matching1(q, level, category, i):
+def handle_sentence_matching1(q, level, category, i,paper_display_id):
     """处理句子匹配题（包括问答匹配题）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -755,7 +755,7 @@ def handle_sentence_matching1(q, level, category, i):
         st.session_state[answer_key] = selected_option.split('.')[0].strip()
 
 
-def handle_text_judgment2(q, level, category, i):
+def handle_text_judgment2(q, level, category, i,paper_display_id):
     """处理阅读判断题"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -819,7 +819,7 @@ def handle_text_judgment2(q, level, category, i):
 
     st.session_state[answer_key] = selected_option
 
-def handle_sentence_matching2(q, level, category, i):
+def handle_sentence_matching2(q, level, category, i,paper_display_id):
     """处理句子匹配题"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -897,7 +897,7 @@ def handle_sentence_matching2(q, level, category, i):
         st.session_state[answer_key] = selected_option.split('.')[0].strip()
 
 
-def handle_reading_comprehension(q, level, category, i):
+def handle_reading_comprehension(q, level, category, i,paper_display_id):
     """处理阅读理解题"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -995,7 +995,7 @@ def handle_reading_comprehension(q, level, category, i):
         st.markdown(f"### 得分：{score} ({correct_count / total:.0%})")
 
 
-def handle_image_matching(q, level, category, i):
+def handle_image_matching(q, level, category, i,paper_display_id):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
@@ -1164,7 +1164,7 @@ def handle_image_matching(q, level, category, i):
                         st.info(explanations)
 
 
-def handle_image_matching2(q, level, category, i):
+def handle_image_matching2(q, level, category, i,paper_display_id):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
 
@@ -1224,7 +1224,7 @@ def handle_image_matching2(q, level, category, i):
             st.info(type_config.get('explanation_format', '').format(explanation=explanation))
 
 
-def handle_connect_words_into_sentence(q, level, category, i):
+def handle_connect_words_into_sentence(q, level, category, i,paper_display_id):
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = get_hsk_level(level)  # 获取HSK级别
 
@@ -1283,7 +1283,7 @@ def handle_connect_words_into_sentence(q, level, category, i):
             st.markdown(f"**解析：** {adjusted_explanation}", unsafe_allow_html=True)
 
 
-def handle_audio_dialogue_questions(q, level, category, i):
+def handle_audio_dialogue_questions(q, level, category, i,paper_display_id):
     """处理听对话录音题（删除冒号前的内容，动态生成音频）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 4))
@@ -1456,7 +1456,7 @@ def handle_audio_dialogue_questions(q, level, category, i):
             score = f"{correct_count}/{len(questions_data)}"
             st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
 
-def handle_sentence_sorting(q, level, category, i):
+def handle_sentence_sorting(q, level, category, i,paper_display_id):
     """句子排序题处理器"""
     config = DETAILED_QUESTION_CONFIG[level][category]["句子排序题"]
     sentences = q.get("sentences", [])  # 原始句子列表（乱序）
@@ -1502,7 +1502,7 @@ def handle_sentence_sorting(q, level, category, i):
             explanation=explanation
         ))
 
-def handle_passage_filling5(q, level, category, i):
+def handle_passage_filling5(q, level, category, i,paper_display_id):
     """短文选词填空题处理器"""
     config = DETAILED_QUESTION_CONFIG[level][category]["短文选词填空题5"]
     passages = q.get("passages")
@@ -1577,7 +1577,7 @@ def handle_passage_filling5(q, level, category, i):
                 explanation=gap.get("explanation", "根据上下文逻辑选择")
             ))
 
-def handle_passage_filling6(q, level, category, i):
+def handle_passage_filling6(q, level, category, i,paper_display_id):
     """短文选词填空题处理器"""
     # 获取配置信息
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
@@ -1694,7 +1694,7 @@ def handle_passage_filling6(q, level, category, i):
                 st.markdown(f"**解析**：{res['explanation']}")
                 st.markdown("---")
 
-def handle_reading_multiple_choice(q, level, category, i):
+def handle_reading_multiple_choice(q, level, category, i,paper_display_id):
     """阅读文章选择题处理器（完全避免渲染后修改session_state）"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("阅读文章选择题", {})
     hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
@@ -1850,7 +1850,7 @@ def handle_reading_multiple_choice(q, level, category, i):
         st.markdown(f"**答对：{correct_count}/{total_questions}题**")
 
 
-def handle_long_text_comprehension(q, level, category, i):
+def handle_long_text_comprehension(q, level, category, i,paper_display_id):
     """处理长文本理解题（修复嵌套列表格式的选项）"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("长文本理解题", {})
     hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
@@ -2010,7 +2010,7 @@ def handle_long_text_comprehension(q, level, category, i):
                 st.markdown(f"**解析：** {explanation}")
                 st.markdown("---")
 
-def handle_sentence_filling(q, level, category, i):
+def handle_sentence_filling(q, level, category, i,paper_display_id):
     """短文选句填空题处理器"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
     min_gaps = config.get("min_gaps", 5)
@@ -2086,7 +2086,7 @@ def handle_sentence_filling(q, level, category, i):
                 st.markdown(f"**解析**：{res['explanation']}")
                 st.markdown("---")
 
-def handle_sentence_error_choice(q, level, category, i):
+def handle_sentence_error_choice(q, level, category, i,paper_display_id):
     """处理病句选择题"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get("病句选择题", {})
     hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
@@ -2133,7 +2133,7 @@ def handle_sentence_error_choice(q, level, category, i):
             st.markdown(f"**错误选项**：{user_answer} —— {selected_option.split('.', 1)[1].strip()}")
             st.markdown(f"**正确解析**：{explanation}")
 
-def handle_reading_1v2(q, level, category, i):
+def handle_reading_1v2(q, level, category, i,paper_display_id):
     """处理1篇文章+多道题的阅读理解题（增强版）"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", config.get("vocab_level", 4))
@@ -2263,7 +2263,7 @@ def handle_reading_1v2(q, level, category, i):
         st.success(f"得分：{score} ({correct_count / len(questions_data):.0%})")
 
 
-def handle_article_questions(q, level, category, i):
+def handle_article_questions(q, level, category, i,paper_display_id):
     """文章选择题处理器"""
     config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {})
     min_questions = config.get("min_questions", 4)
@@ -2361,7 +2361,7 @@ def handle_article_questions(q, level, category, i):
                 st.markdown(f"**解析**：{res['explanation']}")
                 st.markdown("---")
 
-def handle_article_listening(q, level, category, i):
+def handle_article_listening(q, level, category, i,paper_display_id):
     """处理听短文选择题（问题带音频）"""
     type_config = DETAILED_QUESTION_CONFIG.get(level, {}).get(category, {}).get(q.get('type', ''), {})
     hsk_num = q.get("vocab_level", type_config.get("vocab_level", 6))

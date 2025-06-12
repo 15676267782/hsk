@@ -2,6 +2,7 @@ import streamlit as st
 from util import init_sample_images, show_question_type_example, generate_prompt, get_completion, clean_json_response
 from config import QUESTION_TYPES
 from handle import QUESTION_HANDLERS
+import uuid  # 导入 uuid 模块
 
 # 清理缓存
 st.cache_data.clear()
@@ -99,8 +100,6 @@ def main():
         st.session_state.show_paper_generator = False
     if 'expanded_section' not in st.session_state:
         st.session_state.expanded_section = "question"
-    if 'paper_generation_in_progress' not in st.session_state:
-        st.session_state.paper_generation_in_progress = False
 
     # 确保这些变量也存在于 session_state 中，以便在不同模式下访问
     if 'selected_types' not in st.session_state:
@@ -109,6 +108,8 @@ def main():
         st.session_state.num_questions = 5  # 默认值
     if 'paper_type_counts' not in st.session_state:
         st.session_state.paper_type_counts = {}
+    if 'current_paper_display_id' not in st.session_state:  # 新增：用于确保试卷显示组件 key 的唯一性
+        st.session_state.current_paper_display_id = str(uuid.uuid4())
 
     st.set_page_config(layout="wide")
     st.title("📚 HSK智能题库生成系统")
@@ -174,11 +175,12 @@ def main():
                     # 为选中的题型添加数量选择器
                     if f"check_{type_name}" in st.session_state and st.session_state[f"check_{type_name}"]:
                         count = st.number_input(
-                            "",
+                            f"数量_{type_name}",  # 提供非空标签
                             min_value=1,
                             max_value=10,
                             value=PAPER_CONFIG.get(level, {}).get(category, {}).get(type_name, 5),
-                            key=f"count_{type_name}"
+                            key=f"count_{type_name}",
+                            label_visibility="hidden"  # 隐藏标签
                         )
                         type_counts[type_name] = count
 
@@ -229,25 +231,23 @@ def main():
                             st.text(type_name)
                         with cols[1]:
                             count = st.number_input(
-                                "",
+                                f"数量_{type_name}",  # 提供非空标签
                                 min_value=0,
                                 max_value=20,
                                 value=st.session_state.paper_type_counts.get(cat, {}).get(type_name, default_count),
                                 # 使用 session_state 中的值或默认值
-                                key=f"paper_count_{cat}_{type_name}"
+                                key=f"paper_count_{cat}_{type_name}",
+                                label_visibility="hidden"  # 隐藏标签
                             )
                             st.session_state.paper_type_counts[cat][type_name] = count  # 更新 session_state
 
     # ===== 主内容区域 =====
     with st.container():
         # 一键生成试卷按钮
-        if st.button("📝 一键生成试卷", type="primary",
-                     key="generate_paper_button") and not st.session_state.paper_generation_in_progress:
-            # 设置生成中标志，防止重复点击
-            st.session_state.paper_generation_in_progress = True
-
-            # 每次点击前重置生成计数
-            st.session_state.generated_papers = 0
+        if st.button("📝 一键生成试卷", type="primary", key="generate_paper_button"):
+            # 每次点击时生成新的唯一 ID
+            st.session_state.current_paper_display_id = str(uuid.uuid4())
+            st.session_state.generated_papers = 0  # 每次点击前重置生成计数
 
             with st.spinner(f"正在生成{level}试卷..."):
                 all_questions = []
@@ -256,6 +256,7 @@ def main():
                 current_paper_type_counts = st.session_state.paper_type_counts
 
                 # 检查是否使用自定义数量
+                generate_full_paper = st.session_state.get("generate_full_paper", True)  # 从 session_state 获取
                 if generate_full_paper and current_paper_type_counts:  # 确保 generate_full_paper 为 True 且 paper_type_counts 不为空
                     # 使用用户在侧边栏配置的数量
                     for cat, types_in_cat in current_paper_type_counts.items():
@@ -269,8 +270,8 @@ def main():
                             if response:
                                 data = clean_json_response(response)
                                 if data and "questions" in data:
-                                    for q in data["questions"]:
-                                        q["category"] = cat  # 确保题目包含正确的分类信息
+                                    for q_item in data["questions"]:  # 遍历返回的题目列表
+                                        q_item["category"] = cat  # 确保题目包含正确的分类信息
                                     all_questions.extend(data["questions"])
                 else:
                     # 使用默认配置
@@ -283,8 +284,8 @@ def main():
                             if response:
                                 data = clean_json_response(response)
                                 if data and "questions" in data:
-                                    for q in data["questions"]:
-                                        q["category"] = cat  # 确保题目包含正确的分类信息
+                                    for q_item in data["questions"]:  # 遍历返回的题目列表
+                                        q_item["category"] = cat  # 确保题目包含正确的分类信息
                                     all_questions.extend(data["questions"])
 
                 # 保存到会话状态（确保只保存一套试卷）
@@ -293,12 +294,10 @@ def main():
                     st.session_state.level = level
                     st.session_state.category = "试卷"
                     st.session_state.generated_papers = 1  # 标记已生成一套
-                    display_questions(all_questions, level, "试卷")
+                    display_questions(all_questions, level, "试卷", st.session_state.current_paper_display_id)  # 传递新的 ID
                 else:
                     st.error("生成试卷失败，请重试")
 
-                # 重置生成中标志
-                st.session_state.paper_generation_in_progress = False
 
         st.markdown("---")  # 添加分隔线，用于视觉区分
 
@@ -325,14 +324,15 @@ def main():
                             st.session_state.questions = data["questions"]
                             st.session_state.level = level
                             st.session_state.category = category
-                            display_questions(data["questions"], level, category)
+                            display_questions(data["questions"], level, category,
+                                              st.session_state.current_paper_display_id)  # 传递 ID
                         else:
                             st.error("生成失败，请检查API返回格式")
                             with st.expander("查看原始响应"):
                                 st.code(response)
 
 
-def display_questions(questions, level, category):
+def display_questions(questions, level, category, paper_display_id):  # 接受 paper_display_id
     """展示生成的题目，根据题型分发到不同的处理器"""
 
     # 添加试卷标题
@@ -353,8 +353,8 @@ def display_questions(questions, level, category):
             handler = QUESTION_HANDLERS.get(question_type)
 
             if handler:
-                # 调用对应的处理器，使用正确的分类信息
-                handler(q, level, actual_category, i)
+                # 调用对应的处理器，使用正确的分类信息和 paper_display_id
+                handler(q, level, actual_category, i, paper_display_id)
             else:
                 # 默认处理器或错误处理
                 st.warning(f"未实现的题型处理逻辑：{question_type}")
